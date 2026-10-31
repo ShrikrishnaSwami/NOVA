@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     port: int = 8000
     log_level: str = "INFO"
 
+    # "echo" keeps a fresh installation testable without credentials.
+    # "openai_compatible" works with local runtimes and compatible cloud APIs.
+    ai_provider: str = "echo"
+    ai_model: str = "local-model"
+    ai_base_url: str = "http://127.0.0.1:1234/v1"
+    ai_api_key: str = ""
+    ai_timeout_seconds: float = 60.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="NOVA_",

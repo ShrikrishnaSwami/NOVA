@@ -1,56 +1,33 @@
 # NOVA
 
-**An open-source, hybrid AI desktop assistant for Windows.**
+NOVA is an open-source hybrid AI desktop assistant for Windows, built around voice, memory, local and cloud intelligence, and permission-based computer control.
 
-NOVA is a permission-first desktop assistant designed to combine local models, cloud AI providers, voice interaction, persistent memory, and carefully controlled computer tools.
+The project is in active early development. The current release is a local Python API foundation with a provider-independent chat layer.
 
-> NOVA is under active development. The current repository contains the initial backend foundation; voice, desktop UI, model integrations, and computer-control tools are not implemented yet.
+## Current capabilities
 
-## Project principles
-
-- **Hybrid intelligence:** use local models for lightweight/private tasks and cloud providers for tasks that benefit from stronger reasoning.
-- **Local-first memory:** keep personal conversation data on the user's machine by default.
-- **Permission before action:** tools must request authorization according to their risk level. Model output never grants itself permission.
-- **Provider independence:** swap model providers without rewriting the assistant.
-- **Open source:** build in public and make the system extensible.
-
-## Planned architecture
-
-```text
-NOVA/
-├── src/nova/
-│   ├── api/             # Local HTTP API
-│   ├── core/            # Orchestration and application logic
-│   │   └── ai/          # Provider interfaces and model routing
-│   ├── memory/          # Local conversation and preference storage
-│   ├── permissions/     # Approval policies and action boundaries
-│   └── tools/           # Explicitly registered computer tools
-├── tests/
-├── docs/
-├── .env.example
-├── pyproject.toml
-└── README.md
-```
-
-## Hardware target
-
-The first development target is a Windows laptop with an Intel Core i5-8350U, Intel UHD Graphics 620, and 16 GB RAM. Local model recommendations will be conservative and benchmarked on CPU; cloud inference remains optional.
+- Local FastAPI backend bound to `127.0.0.1`.
+- Health endpoint at `/health`.
+- Interactive API documentation at `/docs`.
+- Chat endpoint at `/chat`.
+- Provider status at `/system/ai`.
+- Setup mode that works without API keys.
+- OpenAI-compatible adapter for local model servers and compatible hosted APIs.
+- Client-controlled conversation history is restricted to user and assistant messages.
 
 ## Requirements
 
 - Windows 10 or 11
-- Python 3.11 or newer
+- Python 3.11 or newer (Python 3.13 is supported)
 - Git
 
-## Run the backend
-
-PowerShell:
+## Run locally
 
 ```powershell
 git clone https://github.com/ShrikrishnaSwami/NOVA.git
 cd NOVA
 
-py -3.11 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
@@ -60,45 +37,59 @@ Copy-Item .env.example .env
 uvicorn nova.main:app --reload
 ```
 
-The local API will be available at `http://127.0.0.1:8000`.
+If PowerShell blocks activation, run this in the same terminal before activating:
 
-- Health check: `GET http://127.0.0.1:8000/health`
-- Interactive API docs: `http://127.0.0.1:8000/docs`
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
 
-Run tests:
+Open:
+
+- Health: http://127.0.0.1:8000/health
+- API docs: http://127.0.0.1:8000/docs
+- AI status: http://127.0.0.1:8000/system/ai
+
+## Try the chat endpoint
+
+In the API docs, open `POST /chat`, choose **Try it out**, and submit:
+
+```json
+{
+  "message": "Hello, NOVA",
+  "history": []
+}
+```
+
+A fresh installation uses `echo` setup mode. This verifies the conversation API but is not an actual language model.
+
+## Connect a model
+
+NOVA's `openai_compatible` provider can connect to a local model server or a compatible hosted API. Configure these values in your local `.env` file:
+
+```dotenv
+NOVA_AI_PROVIDER=openai_compatible
+NOVA_AI_MODEL=your-model-id
+NOVA_AI_BASE_URL=http://127.0.0.1:1234/v1
+NOVA_AI_API_KEY=
+```
+
+Use the base URL, model ID, and key required by the model server or cloud provider. Never commit `.env` or publish API keys. The default URL is a common local-server address; it does not mean a model server is already installed or running.
+
+## Tests
 
 ```powershell
 pytest
 ```
 
-## Configuration
+## Safety direction
 
-NOVA reads optional settings from a local `.env` file. Never commit API keys or personal credentials. See [.env.example](.env.example).
-
-The API binds to loopback (`127.0.0.1`) by default so it is not exposed to the local network.
-
-## Safety model
-
-NOVA will not provide an unrestricted shell to the language model. Computer actions will be exposed through a tool registry with explicit schemas, risk levels, approval checks, and audit records. Destructive or externally visible actions will require user approval. These controls are a design requirement, not an optional feature.
+NOVA will not give a language model unrestricted shell or computer access. Future tools will be explicitly registered, permission-scoped, and gated by user approval for sensitive actions.
 
 ## Roadmap
 
-- [x] Initial repository and MIT license
-- [x] Minimal FastAPI backend and health endpoint
-- [x] Environment-based configuration
-- [ ] Provider interface and local/cloud model adapters
-- [ ] SQLite conversation memory
-- [ ] Permission manager and audit log
-- [ ] Text chat experience
-- [ ] Voice input and speech output
-- [ ] Windows desktop interface
-- [ ] Approved file, application, and system tools
-- [ ] Plugin SDK and documentation
-
-## Contributing
-
-Issues and pull requests are welcome. Please read the project documentation before proposing changes to permissions, data handling, or computer-control behavior.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and milestones.
 
 ## License
 
-NOVA is released under the [MIT License](LICENSE).
+MIT. See [LICENSE](LICENSE).

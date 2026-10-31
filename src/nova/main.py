@@ -2,14 +2,17 @@
 
 from fastapi import FastAPI
 
+from nova.api.chat import router as chat_router
 from nova.config import get_settings
 
 settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
-    description="Local API foundation for the NOVA desktop assistant.",
+    version="0.2.0",
+    description="Local API and provider-independent AI foundation for NOVA.",
 )
+
+app.include_router(chat_router)
 
 
 @app.get("/health", tags=["system"])
