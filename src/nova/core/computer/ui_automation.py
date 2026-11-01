@@ -85,3 +85,70 @@ def click_named_control(handle: int, name: str, control_type: str) -> dict[str, 
     except Exception as exc:
         raise UIAutomationError(f"Windows could not activate that control: {exc}") from exc
     return {"name": normalized, "control_type": control_type, "message": f"Activated {normalized}."}
+
+
+
+def list_editable_fields(handle: int, limit: int = 50) -> list[dict[str, Any]]:
+    """List named, visible, enabled, non-password Edit controls only."""
+    window = _window(handle)
+    results = []
+    try:
+        for control in window.descendants():
+            try:
+                info = control.element_info
+                if (
+                    str(info.control_type or "") != "Edit"
+                    or not str(info.name or "").strip()
+                    or not control.is_visible()
+                    or not control.is_enabled()
+                    or bool(getattr(info, "is_password", False))
+                ):
+                    continue
+                results.append({
+                    "name": str(info.name)[:200],
+                    "automation_id": str(info.automation_id or "")[:100],
+                    "handle": int(handle),
+                    "control_type": "Edit",
+                })
+                if len(results) >= max(1, min(int(limit), 100)):
+                    break
+            except Exception:
+                continue
+    except Exception as exc:
+        raise UIAutomationError(f"Could not inspect editable application fields: {exc}") from exc
+    return results
+
+
+def enter_text_in_field(handle: int, name: str, text: str) -> dict[str, str]:
+    """Set text in one unique accessible non-password Edit control."""
+    normalized = " ".join(str(name).split())
+    value = str(text)
+    if not normalized or len(normalized) > 200:
+        raise UIAutomationError("An exact accessible field name is required.")
+    if not value or len(value) > 2000:
+        raise UIAutomationError("Text entry must contain 1 to 2,000 characters.")
+    window = _window(handle)
+    matches = []
+    try:
+        for control in window.descendants():
+            try:
+                info = control.element_info
+                if (
+                    str(info.control_type or "") == "Edit"
+                    and " ".join(str(info.name or "").split()) == normalized
+                    and control.is_visible()
+                    and control.is_enabled()
+                    and not bool(getattr(info, "is_password", False))
+                ):
+                    matches.append(control)
+            except Exception:
+                continue
+    except Exception as exc:
+        raise UIAutomationError(f"Could not locate the requested text field: {exc}") from exc
+    if len(matches) != 1:
+        raise UIAutomationError("The field name must identify exactly one enabled visible non-password field.")
+    try:
+        matches[0].set_edit_text(value)
+    except Exception as exc:
+        raise UIAutomationError(f"Windows could not enter text in that field: {exc}") from exc
+    return {"name": normalized, "message": f"Entered text into {normalized}. The text was not recorded in NOVA's audit log."}
