@@ -227,13 +227,29 @@ class MemoryStore:
             return cursor.rowcount > 0
 
     def update_memory(self, memory_id: str, content: str) -> bool:
-        if _NEVER_STORE.search(content):
+        """Edit a memory and re-apply the storage and approval safety policy."""
+        normalized = content.strip()[:1000]
+        if _NEVER_STORE.search(normalized):
             raise ValueError("NOVA will not store passwords, credentials, financial secrets, or government identifiers.")
+        if len(normalized) < 8:
+            raise ValueError("Memory content must contain at least 8 non-whitespace characters.")
+
+        now = _now()
+        vector = json.dumps(_vector(normalized), separators=(",", ":"))
         with self._connect() as db:
-            cursor = db.execute(
-                "UPDATE memories SET content = ?, vector = ?, updated_at = ? WHERE id = ?",
-                (content[:1000], json.dumps(_vector(content[:1000]), separators=(",", ":")), _now(), memory_id),
-            )
+            if _REQUIRES_APPROVAL.search(normalized):
+                cursor = db.execute(
+                    """UPDATE memories
+                       SET content = ?, category = 'sensitive', status = 'pending',
+                           source = 'sensitive-review', vector = ?, updated_at = ?
+                       WHERE id = ?""",
+                    (normalized, vector, now, memory_id),
+                )
+            else:
+                cursor = db.execute(
+                    "UPDATE memories SET content = ?, vector = ?, updated_at = ? WHERE id = ?",
+                    (normalized, vector, now, memory_id),
+                )
             return cursor.rowcount > 0
 
     def delete_memory(self, memory_id: str) -> bool:
