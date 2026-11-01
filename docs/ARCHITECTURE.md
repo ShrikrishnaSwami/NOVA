@@ -101,6 +101,7 @@ The initial computer-control registry lives in `src/nova/core/computer/registry.
 - Text reads are limited to a small extension allowlist and 64 KB; filename search is capped at 200 results.
 - The desktop asks for confirmation for each action and defaults the dialog to No. The API rejects requests without an explicit approval flag.
 - Action metadata is stored in the existing local SQLite database in a `computer_audit` table. File contents are not logged.
-- The language model cannot call this API automatically. A future milestone may add intent planning, but it must preserve this approval boundary.
+- A conservative deterministic parser recognizes only exact app-launch requests for the allowlisted applications and routes them through the desktop confirmation prompt. It does not ask the language model to decide or execute tools. Other requests remain normal chat.
+- Future intent planning may expand this parser, but it must preserve this approval boundary.
 
 This is a local-user permission boundary, not a hardened multi-user security boundary. Keep the API bound to loopback; do not expose it to a network without adding authentication and a stronger authorization design.
