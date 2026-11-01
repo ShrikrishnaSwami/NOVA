@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     computer_allowed_roots: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=environment_file,
+        env_file=None,
         env_prefix="NOVA_",
         env_file_encoding="utf-8",
         extra="ignore",
@@ -67,4 +67,4 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return one cached settings instance for the application."""
-    return Settings()
+    return Settings(_env_file=environment_file())
