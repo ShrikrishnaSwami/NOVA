@@ -1056,7 +1056,7 @@ class NovaWindow(QMainWindow):
             arguments = json.dumps(call.get("arguments", {}), ensure_ascii=False, indent=2)
             simulation_label = " [SIMULATION ONLY]" if tool_name.startswith("simulation.") else ""
             item = QListWidgetItem(
-                f"{index}. {tool_name}{simulation_label}\\nArguments:\\n{arguments}"
+                f"{index}. {tool_name}{simulation_label}\nArguments:\n{arguments}"
             )
             action_list.addItem(item)
         approval_layout.addWidget(action_list)
@@ -1098,7 +1098,7 @@ class NovaWindow(QMainWindow):
             "The user approved the proposed registered tools, but execution failed. "
             "No successful tool results are available. The execution error was: "
             + str(message)
-            + "\\nExplain clearly what failed and do not claim that any action completed.",
+            + "\nExplain clearly what failed and do not claim that any action completed.",
             include_latest_user=True,
         )
 
