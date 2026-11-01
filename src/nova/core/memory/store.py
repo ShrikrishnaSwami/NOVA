@@ -12,7 +12,6 @@ import json
 import math
 import re
 import sqlite3
-import struct
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,11 +28,15 @@ _STOPWORDS = {
     "through", "too", "was", "were", "what", "when", "where", "which",
     "who", "will", "with", "would", "you", "your",
 }
-_SENSITIVE = re.compile(
+_NEVER_STORE = re.compile(
     r"\b(password|passcode|secret key|api key|access token|credit card|"
     r"bank account|social security|social insurance|sin number|"
-    r"driver'?s license|passport number|medical diagnosis|"
-    r"home address|street address|phone number)\b",
+    r"driver'?s license|passport number)\b",
+    re.IGNORECASE,
+)
+_REQUIRES_APPROVAL = re.compile(
+    r"\b(medical diagnosis|home address|street address|phone number|"
+    r"medical condition|health condition)\b",
     re.IGNORECASE,
 )
 _EXPLICIT = re.compile(r"\bremember(?: that)?\s+(.+)", re.IGNORECASE)
@@ -156,9 +159,10 @@ class MemoryStore:
 
     def capture_from_text(self, text: str) -> dict[str, Any] | None:
         """Capture safe facts; queue high-impact facts for explicit approval."""
-        if _SENSITIVE.search(text):
+        if _NEVER_STORE.search(text):
             return None
 
+        requires_approval = bool(_REQUIRES_APPROVAL.search(text))
         explicit = _EXPLICIT.search(text)
         if explicit:
             content = explicit.group(1).strip().rstrip(".!?")
@@ -176,6 +180,8 @@ class MemoryStore:
                 status, source = "approved", "automatic"
                 category = "preference" if match.re is _AUTO_PATTERNS[0] else "project-or-interest"
 
+        if requires_approval:
+            status, source, category = "pending", "sensitive-review", "sensitive"
         content = content[:1000]
         if len(content) < 8:
             return None
@@ -217,8 +223,8 @@ class MemoryStore:
             return cursor.rowcount > 0
 
     def update_memory(self, memory_id: str, content: str) -> bool:
-        if _SENSITIVE.search(content):
-            raise ValueError("NOVA will not store sensitive credentials or personal identifiers.")
+        if _NEVER_STORE.search(content):
+            raise ValueError("NOVA will not store passwords, credentials, financial secrets, or government identifiers.")
         with self._connect() as db:
             cursor = db.execute(
                 "UPDATE memories SET content = ?, vector = ?, updated_at = ? WHERE id = ?",
