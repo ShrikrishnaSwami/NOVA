@@ -10,34 +10,34 @@ candidate models through the same local runtime and the same prompts.
 2. Open PowerShell in the NOVA repository and activate the virtual environment.
 3. Run:
 
-\`\`\`powershell
+```powershell
 python scripts/benchmark_local_models.py
-\`\`\`
+```
 
 The script uses Bionic's default OpenAI-compatible address,
-\`http://127.0.0.1:1235/v1\`. It discovers model IDs from \`/models\`, performs one
+`http://127.0.0.1:1235/v1`. It discovers model IDs from `/models`, performs one
 unmeasured warm-up, and then measures short and detailed prompts three times.
 It reports median time-to-first-token (TTFT), total time, and output character
 count. It never prints generated response text, writes to NOVA's memory, or
-changes your \`.env\`.
+changes your `.env`.
 
 If your runtime uses another address:
 
-\`\`\`powershell
+```powershell
 python scripts/benchmark_local_models.py --base-url http://127.0.0.1:1235/v1
-\`\`\`
+```
 
 To test a specific model ID (or several IDs exposed by the runtime):
 
-\`\`\`powershell
+```powershell
 python scripts/benchmark_local_models.py --model qwen3-1.7b
-\`\`\`
+```
 
 For a longer, more stable run:
 
-\`\`\`powershell
+```powershell
 python scripts/benchmark_local_models.py --runs 5 --max-tokens 384
-\`\`\`
+```
 
 ## Candidate models to compare
 
