@@ -442,3 +442,28 @@ class ComputerControlsDialog(QDialog):
         self.foreground_timer.stop()
         self._foreground_watch_enabled = False
         super().closeEvent(event)
+
+
+    def execute_system_action(self, endpoint: str, payload: dict, description: str) -> dict | None:
+        answer = QMessageBox.question(
+            self, "Approve Windows action?",
+            f"NOVA is about to {description}.\n\nAllow this one action?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.status.setText("Action cancelled. Windows was not changed.")
+            return None
+        try:
+            result = self.request("POST", endpoint, json=payload)
+            self.status.setText(result.get("message", "Windows action completed."))
+            return result
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = exc.response.json().get("detail", str(exc))
+            except ValueError:
+                detail = str(exc)
+            QMessageBox.warning(self, "Windows action blocked", str(detail))
+        except Exception as exc:
+            QMessageBox.warning(self, "Windows action failed", str(exc))
+        return None
