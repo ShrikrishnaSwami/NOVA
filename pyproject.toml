@@ -32,6 +32,7 @@ voice = [
 ]
 windows = [
     "pycaw>=20240210,<2025",
+    "pywinauto>=0.6.9,<1.0",
 ]
 documents = [
     "pypdf>=5.0,<7.0",
