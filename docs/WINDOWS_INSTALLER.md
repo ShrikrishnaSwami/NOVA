@@ -19,7 +19,7 @@ pytest -q
 & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" "installer\NOVA.iss"
 ~~~~
 
-The portable application is created under dist\NOVA; the installer is dist\NOVA-Setup-0.6.0.exe.
+The portable application is created under dist\NOVA; the installer is dist\NOVA-Setup-0.7.0.exe.
 
 The GitHub Actions workflow .github/workflows/windows-installer.yml runs the test suite, packages the desktop application, builds the installer, and uploads it as an artifact. A v* tag additionally publishes the installer to a GitHub Release.
 
