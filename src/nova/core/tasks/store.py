@@ -121,15 +121,17 @@ class TaskStore:
         return [self._decode(row) for row in rows]
 
     def record_run(self, task: dict[str, Any], outcome: str, result: dict[str, Any], finished: datetime | None = None) -> None:
-        finished = finished or _utcnow()
         started = _utcnow()
+        finished = finished or _utcnow()
         run_id = str(uuid4())
         next_status = "completed" if task["recurrence"] == "once" else "scheduled"
         next_schedule = task["schedule_at"]
         if task["recurrence"] in {"daily", "weekly"}:
             from datetime import timedelta
             next_time = datetime.fromisoformat(task["schedule_at"])
-            next_time += timedelta(days=1 if task["recurrence"] == "daily" else 7)
+            increment = timedelta(days=1 if task["recurrence"] == "daily" else 7)
+            while next_time <= finished:
+                next_time += increment
             next_schedule = _iso(next_time)
         if outcome != "success":
             next_status = "failed"
