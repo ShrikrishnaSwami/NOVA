@@ -1017,6 +1017,14 @@ class NovaWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         if self._quit_requested or not self._tray_available:
+            self._stop_owned_backend()
+            if self._hotkey_registered:
+                try:
+                    import ctypes
+                    ctypes.windll.user32.UnregisterHotKey(None, 0x4E4F)
+                except Exception:
+                    pass
+                self._hotkey_registered = False
             event.accept()
             return
         self.hide()
