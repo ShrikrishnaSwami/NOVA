@@ -249,7 +249,12 @@ class WakeWordWorker(QThread):
         )
         self.session.start()
         self.listening.emit()
-        while not self._stop_requested.is_set() and self.session.running:
+        session_thread = self.session._thread
+        while (
+            not self._stop_requested.is_set()
+            and session_thread is not None
+            and session_thread.is_alive()
+        ):
             self.msleep(100)
         self.session.stop(timeout=2.0)
 
@@ -1215,6 +1220,10 @@ class NovaWindow(QMainWindow):
             return
         self.speech_worker = SpeechOutputWorker(self.last_response_text)
         self.speech_worker.failed.connect(self.connection_label.setText)
+        self.speech_worker.finished_speaking.connect(
+            lambda: self.speak_button.setText("🔊  Read last reply")
+        )
+        self.speak_button.setText("■  Stop speaking")
         self.speech_worker.start()
 
     def _check_status(self) -> None:
