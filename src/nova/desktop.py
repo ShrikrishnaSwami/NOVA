@@ -1073,6 +1073,8 @@ class NovaWindow(QMainWindow):
                     pass
                 self._hotkey_registered = False
             event.accept()
+            if not self._quit_requested:
+                QTimer.singleShot(0, QApplication.instance().quit)
             return
         self.hide()
         if hasattr(self, "tray") and notifications_enabled():
@@ -1290,7 +1292,8 @@ def main() -> None:
     app.setQuitOnLastWindowClosed(False)
     instance_lock = QLockFile(str(user_data_dir() / "nova.lock"))
     if not instance_lock.tryLock(0):
-        QMessageBox.information(None, "NOVA is already running", "NOVA is already active in the Windows notification area.")
+        if "--background" not in sys.argv:
+            QMessageBox.information(None, "NOVA is already running", "NOVA is already active in the Windows notification area.")
         return
     window = NovaWindow()
     if "--background" not in sys.argv:
