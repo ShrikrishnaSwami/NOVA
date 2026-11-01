@@ -19,9 +19,14 @@ pytest -q
 & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" "installer\NOVA.iss"
 ~~~~
 
-The portable application is created under dist\NOVA; the installer is dist\NOVA-Setup-0.7.0.exe.
+The portable application folder is created under `dist\NOVA`; its main executable is `dist\NOVA\NOVA.exe`. Keep the entire folder together when moving or running it—the executable depends on the bundled libraries and resources beside it. The installer is `dist\NOVA-Setup-0.7.0.exe`.
 
-The GitHub Actions workflow .github/workflows/windows-installer.yml runs the test suite, packages the desktop application, builds the installer, and uploads it as an artifact. A v* tag additionally publishes the installer to a GitHub Release.
+The GitHub Actions **Windows installer** workflow runs the test suite and creates two downloadable artifacts:
+
+- `NOVA-Portable-Windows`: a ZIP containing the complete portable `NOVA` folder. Extract it, then run `NOVA\NOVA.exe`.
+- `NOVA-Windows-Installer`: the per-user Windows installer, which creates Start Menu shortcuts and manages installation and uninstallation.
+
+To build these artifacts, open the repository's **Actions** tab, select **Windows installer**, and choose **Run workflow**. A `v*` tag also publishes both files to a GitHub Release.
 
 ## User data
 
