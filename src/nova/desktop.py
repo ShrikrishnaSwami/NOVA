@@ -11,6 +11,7 @@ from uuid import uuid4
 from typing import Any
 
 import httpx
+from nova.config import get_settings
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
@@ -527,7 +528,7 @@ class NovaWindow(QMainWindow):
             self.connection_label.setText("Stopping microphone…")
             return
 
-        model_path = os.getenv("NOVA_VOSK_MODEL_PATH", "").strip()
+        model_path = get_settings().vosk_model_path.strip()
         if not model_path:
             QMessageBox.information(
                 self,
