@@ -1,5 +1,7 @@
 """Create and reuse the configured AI provider."""
+
 from functools import lru_cache
+
 from nova.config import get_settings
 from nova.core.ai.providers import EchoProvider, OpenAICompatibleProvider
 
@@ -13,10 +15,17 @@ def get_provider():
         return EchoProvider()
     if name == "openai_compatible":
         return OpenAICompatibleProvider(
-            base_url=settings.ai_base_url, model=settings.ai_model,
-            api_key=settings.ai_api_key, timeout_seconds=settings.ai_timeout_seconds,
+            base_url=settings.ai_base_url,
+            model=settings.ai_model,
+            api_key=settings.ai_api_key,
+            timeout_seconds=settings.ai_timeout_seconds,
+            max_tokens=settings.ai_max_tokens,
+            top_p=settings.ai_top_p,
+            qwen_no_think=settings.ai_qwen_no_think,
         )
-    raise ValueError("Unsupported NOVA_AI_PROVIDER. Use 'echo' or 'openai_compatible'.")
+    raise ValueError(
+        "Unsupported NOVA_AI_PROVIDER. Use 'echo' or 'openai_compatible'."
+    )
 
 
 async def close_provider() -> None:
