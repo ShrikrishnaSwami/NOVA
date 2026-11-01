@@ -41,6 +41,42 @@ def _start_menu_roots() -> list[Path]:
     return roots
 
 
+def _registered_start_apps() -> list[dict[str, str]]:
+    """Read Windows' registered Start Apps catalogue, including packaged/MSIX apps."""
+    if os.name != "nt":
+        return []
+    command = "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress"
+    try:
+        completed = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return []
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return []
+    rows = payload if isinstance(payload, list) else [payload]
+    apps = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("Name", "")).strip()
+        app_id = str(row.get("AppID", "")).strip()
+        if name and app_id:
+            apps.append({"name": name, "app_id": "startapp:" + app_id})
+    return apps
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -131,6 +167,9 @@ class ComputerToolRegistry:
                         break
                 if len(found) >= _MAX_APPLICATIONS:
                     break
+        for app in _registered_start_apps():
+            key = app["app_id"].casefold()
+            found.setdefault(key, app)
         apps = sorted(found.values(), key=lambda item: item["name"].casefold())
         apps.append({"name": "Windows Settings", "app_id": _WINDOWS_SETTINGS_ID})
         return apps
@@ -174,6 +213,16 @@ class ComputerToolRegistry:
                 app = selected["name"]
                 if app_id == _WINDOWS_SETTINGS_ID:
                     subprocess.Popen(["explorer.exe", "ms-settings:"], shell=False, close_fds=True)
+                elif app_id.startswith("startapp:"):
+                    registered_id = app_id.removeprefix("startapp:")
+                    if Path(registered_id).is_file() and Path(registered_id).suffix.lower() == ".lnk":
+                        _start_shortcut(registered_id)
+                    else:
+                        subprocess.Popen(
+                            ["explorer.exe", "shell:AppsFolder\\" + registered_id],
+                            shell=False,
+                            close_fds=True,
+                        )
                 else:
                     _start_shortcut(app_id)
                 result = {"message": f"Opened {app}."}
