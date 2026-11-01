@@ -6,7 +6,7 @@ import re
 
 _OPEN_APP_PATTERN = re.compile(
     r"^(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?"
-    r"(calculator|calc|notepad|paint|file\s+explorer|explorer)"
+    r"(windows\s+settings|settings|calculator|calc|notepad|paint|file\s+explorer|explorer)"
     r"(?:\s+please)?[.!?]*$",
     re.IGNORECASE,
 )
