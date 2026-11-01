@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     ai_api_key: str = ""
     ai_timeout_seconds: float = 60.0
 
+    # SQLite database; the path is expanded and created automatically.
+    memory_db_path: str = "~/.nova/nova_memory.sqlite3"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="NOVA_",
