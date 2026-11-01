@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 from nova.config import environment_file, get_settings, user_data_dir
-from nova.core.computer.automation import AutomationEngine, AutomationPlanError
+from nova.core.computer.automation import AutomationEngine, AutomationPlanError, execute_plan
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
@@ -498,25 +498,25 @@ class NovaWindow(QMainWindow):
         # A chained request is planned completely before any step runs.
         multi_plan = plan_multi_step_intent(message)
         if multi_plan:
+            engine = AutomationEngine()
             try:
-                multi_plan = AutomationEngine().validate_plan(multi_plan)
+                engine.validate_plan(multi_plan)
             except AutomationPlanError as exc:
                 self._add_message("NOVA", f"I couldn't safely validate that task: {exc}")
                 return
             self.input.clear()
             self._add_message("YOU", message)
             self.history.append({"role": "user", "content": message})
-            outcomes = []
-            for index, step in enumerate(multi_plan, start=1):
+
+            def run_step(step: dict[str, Any], index: int) -> dict[str, Any] | None:
                 dialog = ComputerControlsDialog(self)
-                result = None
-                if step["kind"] == "system":
-                    result = dialog.execute_system_action(
-                        str(step["endpoint"]), dict(step["payload"]),
-                        str(step["description"]),
-                    )
-                elif step["kind"] == "window":
-                    try:
+                try:
+                    if step["kind"] == "system":
+                        return dialog.execute_system_action(
+                            str(step["endpoint"]), dict(step["payload"]),
+                            str(step["description"]),
+                        )
+                    if step["kind"] == "window":
                         response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/windows?limit=200")
                         response.raise_for_status()
                         target_name = str(step["target"]).casefold()
@@ -534,18 +534,25 @@ class NovaWindow(QMainWindow):
                         else:
                             target = candidates[0] if candidates else None
                         if target:
-                            result = dialog.execute_window_target(target, str(step["action"]))
-                    except Exception as exc:
-                        outcomes.append(f"Step {index}: failed — {exc}")
-                dialog.close()
-                if result:
-                    outcomes.append(f"Step {index}: {result.get('message', 'completed')}")
+                            return dialog.execute_window_target(target, str(step["action"]))
+                    return None
+                finally:
+                    dialog.close()
+
+            results = execute_plan(engine, multi_plan, run_step)
+            outcomes = []
+            for result in results:
+                status = result["status"]
+                if status == "completed":
+                    message_text = result.get("result", {}).get("message", "completed")
+                    outcomes.append(f"Step {result['step']}: {message_text}")
+                elif status == "failed":
+                    outcomes.append(f"Step {result['step']}: failed — {result.get('message', 'unknown error')}")
                 else:
-                    outcomes.append(f"Step {index}: cancelled, blocked, or target unavailable.")
-                    break
+                    outcomes.append(f"Step {result['step']}: cancelled or target unavailable.")
             reply = "Multi-step task finished:\n" + "\n".join(outcomes)
-            if len(outcomes) < len(multi_plan):
-                reply += f"\nStopped after {len(outcomes)} of {len(multi_plan)} steps. Remaining steps were not run."
+            if results and results[-1]["status"] != "completed" and len(results) < len(multi_plan):
+                reply += f"\nStopped after {results[-1]['step']} of {len(multi_plan)} steps. Remaining steps were not run."
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText("Multi-step task completed with per-step approval.")
