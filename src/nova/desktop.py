@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import application_candidates, requested_application_name
+from nova.core.computer.intents import application_candidates, plan_computer_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -508,6 +508,41 @@ class NovaWindow(QMainWindow):
                 if result
                 else f"I didn't open {app_name}. The action was cancelled or Windows blocked it."
             )
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
+            return
+
+        # Route recognized local discovery/file requests through the same approval surface.
+        # Searches are read-only, while opening/reading still require a per-action Yes/No.
+        computer_plan = plan_computer_intent(message)
+        if computer_plan:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            dialog = ComputerControlsDialog(self)
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            result = dialog.execute(
+                str(computer_plan["action"]),
+                dict(computer_plan["parameters"]),
+                str(computer_plan["description"]),
+            )
+            if result is None:
+                reply = "I didn't perform that computer action. It was cancelled or blocked."
+            elif "matches" in result:
+                found = result["matches"]
+                reply = (f"I found {len(found)} matching item(s). The results are shown in Computer Controls."
+                         if found else "I couldn't find any matching items in the accessible locations.")
+                if result.get("truncated"):
+                    reply += " The result list was capped; narrow the search to get more specific results."
+            elif "entries" in result:
+                reply = f"I listed {len(result['entries'])} items. They're shown in Computer Controls."
+            elif "content" in result:
+                reply = f"I read {Path(str(result.get('path', 'file'))).name}. Its contents are displayed locally in Computer Controls and were not sent to the AI model."
+            else:
+                reply = str(result.get("message", "The action completed."))
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText(reply)
