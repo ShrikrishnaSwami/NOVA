@@ -4,6 +4,7 @@ from nova.core.computer.intents import match_open_application_command
 APPS = [
     {"name": "Spotify", "app_id": r"C:\\Start Menu\\Spotify.lnk"},
     {"name": "Google Chrome", "app_id": r"C:\\Start Menu\\Chrome.lnk"},
+    {"name": "Outlook (new)", "app_id": "startapp:Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows"},
     {"name": "Windows Settings", "app_id": "windows-settings"},
 ]
 
@@ -11,6 +12,8 @@ APPS = [
 def test_match_discovered_app_names() -> None:
     assert match_open_application_command("Open Spotify", APPS) == APPS[0]
     assert match_open_application_command("launch Google Chrome", APPS) == APPS[1]
+    assert match_open_application_command("open Outlook", APPS) == APPS[3]
+    assert match_open_application_command("Please open Outlook!", APPS) == APPS[3]
     assert match_open_application_command("Open Settings", APPS) == APPS[2]
 
 
