@@ -72,6 +72,7 @@ class ComputerControlsDialog(QDialog):
             ("Set brightness", self.set_brightness),
             ("Windows Search", self.windows_search),
             ("Watch active app", self.toggle_foreground_watch),
+            ("Watch battery", self.toggle_battery_watch),
         ):
             button = QPushButton(label)
             button.clicked.connect(callback)
@@ -92,6 +93,12 @@ class ComputerControlsDialog(QDialog):
         self.foreground_timer.timeout.connect(self._poll_foreground)
         self._last_foreground_title = None
         self._foreground_watch_enabled = False
+        self.battery_timer = QTimer(self)
+        self.battery_timer.setInterval(60000)
+        self.battery_timer.timeout.connect(self._poll_battery)
+        self._battery_watch_enabled = False
+        self._battery_low_notified = False
+        self._battery_last_plugged = None
 
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
@@ -450,6 +457,8 @@ class ComputerControlsDialog(QDialog):
     def closeEvent(self, event) -> None:
         self.foreground_timer.stop()
         self._foreground_watch_enabled = False
+        self.battery_timer.stop()
+        self._battery_watch_enabled = False
         super().closeEvent(event)
 
 
@@ -567,3 +576,54 @@ class ComputerControlsDialog(QDialog):
             QMessageBox.warning(self, "Text entry blocked", str(detail))
         except Exception as exc:
             QMessageBox.warning(self, "Text entry unavailable", str(exc))
+
+
+    def toggle_battery_watch(self) -> None:
+        if self._battery_watch_enabled:
+            self.battery_timer.stop()
+            self._battery_watch_enabled = False
+            self.status.setText("Battery event monitoring paused.")
+            return
+        answer = QMessageBox.question(
+            self, "Enable battery alerts?",
+            "NOVA will check battery percentage and charging state once per minute while this dialog is open. It will show a Windows notification at 20% or below and when charging state changes. Battery data stays local. Enable?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._battery_watch_enabled = True
+        self._battery_low_notified = False
+        self._battery_last_plugged = None
+        self.battery_timer.start()
+        self._poll_battery()
+        self.status.setText("Battery event monitoring enabled for this dialog only.")
+
+    def _poll_battery(self) -> None:
+        if not self._battery_watch_enabled:
+            return
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery is None:
+                self.status.setText("No battery telemetry is available on this device.")
+                self.battery_timer.stop()
+                self._battery_watch_enabled = False
+                return
+            percent = int(round(battery.percent))
+            plugged = bool(battery.power_plugged)
+            if self._battery_last_plugged is not None and plugged != self._battery_last_plugged:
+                from nova.core.computer.shell_integration import show_windows_toast
+                show_windows_toast("NOVA power event", "Power connected." if plugged else "Running on battery.")
+            self._battery_last_plugged = plugged
+            if percent <= 20 and not plugged and not self._battery_low_notified:
+                from nova.core.computer.shell_integration import show_windows_toast
+                show_windows_toast("NOVA low battery alert", f"Battery is at {percent}%. Connect power when convenient.")
+                self._battery_low_notified = True
+            elif percent > 25 or plugged:
+                self._battery_low_notified = False
+            self.status.setText(f"Battery: {percent}% · {'Charging / plugged in' if plugged else 'On battery'}")
+        except Exception as exc:
+            self.status.setText(f"Battery monitoring stopped: {exc}")
+            self.battery_timer.stop()
+            self._battery_watch_enabled = False
