@@ -447,7 +447,7 @@ class ComputerToolRegistry:
                     current_path = Path(current)
                     directories[:] = [
                         name for name in directories
-                        if not (current_path / name).is_symlink()
+                        if not _is_link_or_junction(current_path / name)
                     ]
                     for name in directories + files:
                         if query in name.lower():
