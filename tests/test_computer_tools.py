@@ -94,14 +94,12 @@ def test_computer_tools_reject_unlisted_applications(tmp_path, monkeypatch) -> N
     assert "catalogue" in response.json()["detail"].lower()
 
 
-def test_windows_settings_launch_uses_fixed_uri_without_shell(tmp_path, monkeypatch) -> None:
+def test_windows_settings_launch_uses_native_shell_open(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
     from nova.core.computer.registry import ComputerToolRegistry
 
     calls = []
-    monkeypatch.setattr(
-        "nova.core.computer.registry.subprocess.Popen",
-        lambda args, **kwargs: calls.append((args, kwargs)),
-    )
+    monkeypatch.setattr(computer_registry.os, "startfile", lambda target: calls.append(target), raising=False)
     registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
     monkeypatch.setattr(
         registry,
@@ -111,10 +109,7 @@ def test_windows_settings_launch_uses_fixed_uri_without_shell(tmp_path, monkeypa
     result = registry.execute("open_application", {"app_id": "windows-settings"})
 
     assert result["message"] == "Opened Windows Settings."
-    assert calls == [
-        (["explorer.exe", "ms-settings:"], {"shell": False, "close_fds": True})
-    ]
-
+    assert calls == ["ms-settings:"]
 
 def test_discover_apps_from_start_menu_shortcuts(tmp_path, monkeypatch) -> None:
     from nova.core.computer import registry as computer_registry
@@ -173,17 +168,15 @@ def test_discover_apps_includes_classic_registry_installations(tmp_path, monkeyp
     assert {"name": "Notion", "app_id": r"exe:C:\Program Files\Notion\Notion.exe"} in apps
 
 
-def test_registered_executable_launch_requires_discovery_and_uses_no_shell(tmp_path, monkeypatch) -> None:
+def test_registered_executable_launch_requires_discovery_and_uses_native_shell(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
     from nova.core.computer.registry import ComputerToolRegistry
 
     executable = tmp_path / "Notion.exe"
     executable.write_bytes(b"test executable")
     app_id = "exe:" + str(executable.resolve())
     calls = []
-    monkeypatch.setattr(
-        "nova.core.computer.registry.subprocess.Popen",
-        lambda args, **kwargs: calls.append((args, kwargs)),
-    )
+    monkeypatch.setattr(computer_registry.os, "startfile", lambda target: calls.append(target), raising=False)
 
     registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
     monkeypatch.setattr(
@@ -194,8 +187,7 @@ def test_registered_executable_launch_requires_discovery_and_uses_no_shell(tmp_p
     result = registry.execute("open_application", {"app_id": app_id})
 
     assert result["message"] == "Opened Notion."
-    assert calls == [([str(executable.resolve())], {"shell": False, "close_fds": True})]
-
+    assert calls == [str(executable.resolve())]
 
 def test_empty_folder_configuration_discovers_accessible_roots(tmp_path, monkeypatch) -> None:
     from nova.core.computer import registry as computer_registry
