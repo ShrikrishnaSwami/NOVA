@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -22,6 +23,8 @@ class WakeWordSession:
         wake_phrases: tuple[str, ...] = ("hey nova",),
         sample_rate: int = 16000,
         silence_timeout_seconds: float = 1.2,
+        command_timeout_seconds: float = 8.0,
+        device: int | None = None,
     ) -> None:
         self.model_path = Path(model_path).expanduser()
         self.on_wake = on_wake
@@ -31,7 +34,9 @@ class WakeWordSession:
         if not self.wake_phrases:
             raise ValueError("At least one wake phrase is required.")
         self.sample_rate = sample_rate
-        self.silence_timeout_seconds = silence_timeout_seconds
+        self.silence_timeout_seconds = max(0.5, float(silence_timeout_seconds))
+        self.command_timeout_seconds = max(self.silence_timeout_seconds, float(command_timeout_seconds))
+        self.device = device
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._running = threading.Event()
@@ -79,6 +84,7 @@ class WakeWordSession:
                 blocksize=4000,
                 dtype="int16",
                 channels=1,
+                device=self.device,
             ) as stream:
                 while not self._stop.is_set():
                     audio, overflowed = stream.read(2000)
@@ -100,7 +106,8 @@ class WakeWordSession:
                     self.on_wake()
                     command = KaldiRecognizer(model, self.sample_rate)
                     utterance = ""
-                    while not self._stop.is_set():
+                    deadline = time.monotonic() + self.command_timeout_seconds
+                    while not self._stop.is_set() and time.monotonic() < deadline:
                         audio, overflowed = stream.read(2000)
                         if overflowed:
                             continue
@@ -108,6 +115,8 @@ class WakeWordSession:
                             utterance = self._text(command.Result())
                             if utterance:
                                 break
+                    if not utterance and not self._stop.is_set():
+                        utterance = self._text(command.FinalResult())
                     if utterance and not self._stop.is_set():
                         self.on_utterance(utterance)
                     wake = KaldiRecognizer(model, self.sample_rate, grammar)

@@ -46,7 +46,8 @@ from PySide6.QtWidgets import (
 )
 
 
-from nova.core.computer.shell_integration import ShellIntegrationError, notifications_enabled, set_notifications_enabled, set_startup_enabled, startup_enabled, show_windows_toast, wake_word_enabled, set_wake_word_enabled
+from nova.core.computer.shell_integration import ShellIntegrationError, notifications_enabled, set_notifications_enabled, set_startup_enabled, startup_enabled, show_windows_toast, wake_word_enabled, set_wake_word_enabled, microphone_device_id
+from nova.desktop_settings import NovaSettingsDialog
 
 
 _SETTINGS = get_settings()
@@ -136,9 +137,10 @@ class VoiceInputWorker(QThread):
     failed = Signal(str)
     listening = Signal(str)
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, device: int | None = None) -> None:
         super().__init__()
         self.model_path = Path(model_path).expanduser()
+        self.device = device
         self._stop_requested = threading.Event()
 
     def stop(self) -> None:
@@ -163,6 +165,7 @@ class VoiceInputWorker(QThread):
                 blocksize=8000,
                 dtype="int16",
                 channels=1,
+                device=self.device,
             ) as stream:
                 while not self._stop_requested.is_set():
                     audio, overflowed = stream.read(4000)
@@ -229,9 +232,10 @@ class WakeWordWorker(QThread):
     failed = Signal(str)
     listening = Signal()
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, device: int | None = None) -> None:
         super().__init__()
         self.model_path = model_path
+        self.device = device
         self._stop_requested = threading.Event()
         self.session: WakeWordSession | None = None
 
@@ -246,6 +250,7 @@ class WakeWordWorker(QThread):
             on_wake=self.activated.emit,
             on_utterance=self.recognized.emit,
             on_error=self.failed.emit,
+            device=self.device,
         )
         self.session.start()
         self.listening.emit()
@@ -1207,7 +1212,7 @@ class NovaWindow(QMainWindow):
             )
             return
 
-        self.voice_worker = VoiceInputWorker(model_path)
+        self.voice_worker = VoiceInputWorker(model_path, microphone_device_id())
         self.voice_worker.listening.connect(self.connection_label.setText)
         self.voice_worker.recognized.connect(self._voice_recognized)
         self.voice_worker.failed.connect(self._voice_failed)
@@ -1231,7 +1236,7 @@ class NovaWindow(QMainWindow):
         if not model_path:
             self.connection_label.setText("Wake word is enabled, but NOVA_VOSK_MODEL_PATH is not configured.")
             return
-        self.wake_thread = WakeWordWorker(model_path)
+        self.wake_thread = WakeWordWorker(model_path, microphone_device_id())
         self.wake_thread.activated.connect(self._wake_word_activated)
         self.wake_thread.recognized.connect(self._wake_word_recognized)
         self.wake_thread.failed.connect(self._voice_failed)
@@ -1455,14 +1460,16 @@ class NovaWindow(QMainWindow):
         self.input.setFocus()
 
     def _open_user_settings(self) -> None:
-        path = environment_file()
-        if not path.exists():
-            QMessageBox.information(self, "NOVA settings", f"No settings file exists yet. Create one at:\n{path}")
-            return
-        try:
-            os.startfile(str(path))
-        except OSError as exc:
-            QMessageBox.warning(self, "Could not open settings", str(exc))
+        dialog = NovaSettingsDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if wake_word_enabled():
+                self._start_wake_word()
+            elif self.wake_thread and self.wake_thread.isRunning():
+                self.wake_thread.stop()
+                self.wake_button.setText("◉  Wake word off")
+            self.startup_action.setChecked(startup_enabled())
+            self.notifications_action.setChecked(notifications_enabled())
+            self.wake_button.setText("■  Wake word on" if wake_word_enabled() else "◉  Wake word off")
 
     def _toggle_startup(self, checked: bool) -> None:
         try:

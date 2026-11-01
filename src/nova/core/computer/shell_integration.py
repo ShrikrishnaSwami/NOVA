@@ -123,3 +123,35 @@ def set_wake_word_enabled(enabled: bool) -> bool:
     except OSError as exc:
         raise ShellIntegrationError(f"Could not save NOVA wake-word preference: {exc}") from exc
     return wake_word_enabled()
+
+
+def microphone_device_id() -> int | None:
+    """Return the locally selected input device, or None for the Windows default."""
+    path = user_data_dir() / "preferences.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("microphone_device_id")
+        return int(value) if value is not None else None
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def set_microphone_device_id(device_id: int | None) -> int | None:
+    """Persist the selected microphone."""
+    if device_id is not None and (not isinstance(device_id, int) or isinstance(device_id, bool) or device_id < 0):
+        raise ValueError("Microphone device ID must be a non-negative integer or None.")
+    directory = user_data_dir()
+    path = directory / "preferences.json"
+    temporary = directory / "preferences.json.tmp"
+    try:
+        try:
+            preferences = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(preferences, dict):
+                preferences = {}
+        except (OSError, ValueError):
+            preferences = {}
+        preferences["microphone_device_id"] = device_id
+        temporary.write_text(json.dumps(preferences, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    except OSError as exc:
+        raise ShellIntegrationError(f"Could not save NOVA microphone preference: {exc}") from exc
+    return microphone_device_id()
