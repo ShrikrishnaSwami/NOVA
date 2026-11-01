@@ -45,7 +45,7 @@ def system_overview() -> dict[str, Any]:
         result["cpu_percent"] = psutil.cpu_percent(interval=0.0)
         result["capabilities"]["process_inventory"] = True
     except ImportError:
-        result["system_metrics_note"] = "Install the optional windows extra for process and resource metrics."
+        result["system_metrics_note"] = "Install NOVA's declared dependencies for process and resource metrics."
     except (OSError, RuntimeError):
         result["system_metrics_note"] = "Some system metrics are unavailable in this session."
     return result
@@ -56,7 +56,7 @@ def list_processes(limit: int = 100) -> list[dict[str, Any]]:
     try:
         import psutil
     except ImportError as exc:
-        raise RuntimeError("Process inventory requires the optional dependency: pip install -e '.[windows]'") from exc
+        raise RuntimeError("Process inventory requires NOVA's declared psutil dependency. Reinstall NOVA with: pip install -e .") from exc
     processes: list[dict[str, Any]] = []
     for process in psutil.process_iter(["pid", "name", "status", "memory_info"]):
         try:
