@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     await close_provider()
 
 
-app = FastAPI(title=settings.app_name, version="0.5.0", description="Local API, AI, and persistent memory foundation for NOVA.", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.6.0", description="Windows-integrated local API, AI, memory, and permissioned automation for NOVA.", lifespan=lifespan)
 app.include_router(chat_router)
 app.include_router(memory_router)
 app.include_router(computer_router)
