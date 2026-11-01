@@ -140,7 +140,7 @@ def test_launch_only_accepts_currently_discovered_shortcuts(tmp_path, monkeypatc
     shortcut.write_bytes(b"fake shortcut")
     launches = []
     monkeypatch.setattr(computer_registry, "_start_menu_roots", lambda: [root])
-    monkeypatch.setattr(computer_registry, "_start_shortcut", lambda path: launches.append(path))
+    monkeypatch.setattr(computer_registry.os, "startfile", lambda path: launches.append(path), raising=False)
 
     registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
     registry.execute("open_application", {"app_id": str(shortcut.resolve())})
