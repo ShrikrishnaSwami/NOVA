@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, requested_application_name
+from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -547,6 +547,47 @@ class NovaWindow(QMainWindow):
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText("Read-only Windows information retrieved.")
+            return
+
+        # Resolve conversational window commands against live visible-window metadata.
+        window_plan = plan_window_intent(message)
+        if window_plan:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/windows?limit=200")
+                response.raise_for_status()
+                windows = response.json().get("windows", [])
+                target_name = window_plan["target"].casefold()
+                candidates = [
+                    item for item in windows
+                    if target_name in str(item.get("title", "")).casefold()
+                ]
+                if len(candidates) > 1:
+                    labels = [f"{item.get('title')} · PID {item.get('pid')}" for item in candidates]
+                    selected, accepted = QInputDialog.getItem(
+                        self, "Choose a window", f"More than one window matches '{window_plan['target']}':",
+                        labels, 0, False,
+                    )
+                    target = candidates[labels.index(selected)] if accepted else None
+                else:
+                    target = candidates[0] if candidates else None
+                if target is None:
+                    reply = f"I couldn't find an open visible window matching '{window_plan['target']}'."
+                else:
+                    dialog = ComputerControlsDialog(self)
+                    result = dialog.execute_window_target(target, window_plan["action"])
+                    dialog.close()
+                    reply = (
+                        result.get("message", "Window action requested.")
+                        if result else "I didn't change that window. The action was cancelled or blocked."
+                    )
+            except Exception as exc:
+                reply = f"I couldn't complete that window action: {exc}"
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
             return
 
         # Route recognized local discovery/file requests through the same approval surface.
