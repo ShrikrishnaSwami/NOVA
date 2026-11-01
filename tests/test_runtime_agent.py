@@ -49,3 +49,39 @@ def test_real_read_only_system_tool_is_registered_and_requires_approval():
     results = registry.execute_chain(calls, approved=True)
     assert results[0]["tool"] == "system.overview"
     assert "platform" in results[0]["result"]
+
+
+
+def test_tool_chain_reports_partial_success_and_stops_after_failure():
+    from nova.core.runtime.tools import ToolRegistry, ToolSpec
+
+    registry = ToolRegistry()
+    registry.register(ToolSpec("test.ok", "success", {"properties": {}, "required": []},
+                               lambda _args: {"message": "done"}))
+    registry.register(ToolSpec("test.fail", "failure", {"properties": {}, "required": []},
+                               lambda _args: (_ for _ in ()).throw(RuntimeError("device unavailable"))))
+    registry.register(ToolSpec("test.never", "must not run", {"properties": {}, "required": []},
+                               lambda _args: pytest.fail("A later step ran after failure.")))
+    results = registry.execute_chain([
+        {"name": "test.ok", "arguments": {}},
+        {"name": "test.fail", "arguments": {}},
+        {"name": "test.never", "arguments": {}},
+    ], approved=True)
+    assert [item["status"] for item in results] == ["completed", "failed", "skipped"]
+    assert results[1]["error"] == "device unavailable"
+    assert results[2]["reason"] == "Stopped because step 2 failed."
+
+
+def test_tool_chain_validates_all_calls_before_any_execution():
+    from nova.core.runtime.tools import ToolRegistry, ToolSpec
+
+    executed = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec("test.record", "record", {"properties": {}, "required": []},
+                               lambda _args: executed.append(True) or {"ok": True}))
+    with pytest.raises(ValueError, match="Unregistered tool"):
+        registry.execute_chain([
+            {"name": "test.record", "arguments": {}},
+            {"name": "not.registered", "arguments": {}},
+        ], approved=True)
+    assert executed == []

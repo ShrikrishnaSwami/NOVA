@@ -73,17 +73,34 @@ class ToolRegistry:
         return validated
 
     def execute_chain(self, calls: list[dict[str, Any]], *, approved: bool = False) -> list[dict[str, Any]]:
+        """Run a fully validated, approved chain and preserve partial outcomes."""
         validated = self.validate_chain(calls)
         if not approved:
             raise PermissionError("Tool chain requires explicit approval.")
-        results = []
-        for tool, arguments in validated:
-            result = tool.handler(arguments)
-            results.append({
-                "tool": tool.name,
-                "simulation": tool.simulation,
-                "result": result,
-            })
+        results: list[dict[str, Any]] = []
+        for index, (tool, arguments) in enumerate(validated, start=1):
+            try:
+                result = tool.handler(arguments)
+                if not isinstance(result, dict):
+                    raise TypeError("Tool handler returned an unsupported result.")
+                results.append({
+                    "step": index, "tool": tool.name,
+                    "simulation": tool.simulation, "status": "completed",
+                    "result": result,
+                })
+            except Exception as exc:
+                results.append({
+                    "step": index, "tool": tool.name,
+                    "simulation": tool.simulation, "status": "failed",
+                    "error": str(exc)[:500] or type(exc).__name__,
+                })
+                for skipped_index, (skipped_tool, _args) in enumerate(validated[index:], start=index + 1):
+                    results.append({
+                        "step": skipped_index, "tool": skipped_tool.name,
+                        "simulation": skipped_tool.simulation, "status": "skipped",
+                        "reason": f"Stopped because step {index} failed.",
+                    })
+                break
         return results
 
 
