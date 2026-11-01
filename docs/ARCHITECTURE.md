@@ -138,7 +138,7 @@ The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attach
 
 ## Windows shell integration and event-driven workflows
 
-The PySide6 desktop registers a Windows notification-area icon, hides to the tray on close, and exits only through the tray Quit command. Ctrl+Alt+Space is registered through RegisterHotKey (no global keyboard hook); it brings NOVA forward. A current-user startup option writes only the NOVA value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run and can be removed from the same menu. Native toast notifications use the optional winotify adapter. Replies received while NOVA is hidden can generate a toast.
+The PySide6 desktop registers a Windows notification-area icon, hides to the tray on close, and exits only through the tray Quit command. Ctrl+Alt+Space is registered through RegisterHotKey (no global keyboard hook); it brings NOVA forward. A current-user startup option writes only the NOVA value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run and can be removed from the same menu. Native toast notifications use the optional winotify adapter. Reply notifications are off by default; the user must explicitly enable them from the tray menu. That preference is stored in the user's local preferences.json. A one-off test toast is available.
 
 Computer Controls provides opt-in battery and power-state monitoring. It polls psutil battery telemetry once per minute only while the dialog is open; it reports plug/unplug changes and one low-battery alert per low-battery episode. This is not a general Windows event subscription and it does not inspect notifications belonging to other applications.
 
