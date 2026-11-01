@@ -18,7 +18,7 @@ The project is in active early development. The current release includes a local
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
-- Permission-gated computer tools for allowlisted apps and explicitly approved folders.
+- Permission-gated computer tools that discover Windows Start Menu app shortcuts and explicitly approved folders.
 - Local audit log for completed or blocked computer operations.
 
 ## Requirements
