@@ -11,7 +11,7 @@ import os
 import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import psutil
 
@@ -60,8 +60,10 @@ class SystemState:
 class SystemStateMonitor:
     """Async telemetry sampler with bounded alert history and no autonomous writes."""
 
-    def __init__(self, interval_seconds: float = 2.0) -> None:
+    def __init__(self, interval_seconds: float = 2.0,
+                 on_alert: Callable[[dict[str, Any]], None] | None = None) -> None:
         self.interval_seconds = max(1.0, min(float(interval_seconds), 60.0))
+        self.on_alert = on_alert
         self.state = SystemState()
         self.alerts: deque[dict[str, Any]] = deque(maxlen=100)
         self._task: asyncio.Task[None] | None = None
@@ -155,13 +157,20 @@ class SystemStateMonitor:
         if now - self._alerted.get(key, 0.0) < 300:
             return
         self._alerted[key] = now
-        self.alerts.append({
+        alert = {
             "timestamp": now,
             "severity": severity,
             "key": key,
             "message": message,
             "source": "local-telemetry",
-        })
+        }
+        self.alerts.append(alert)
+        if self.on_alert is not None:
+            try:
+                self.on_alert(alert)
+            except Exception:
+                # Monitoring remains healthy even if desktop notifications fail.
+                pass
 
     def snapshot(self) -> dict[str, Any]:
         return self.state.to_dict()

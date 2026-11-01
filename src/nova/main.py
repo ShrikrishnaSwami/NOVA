@@ -12,6 +12,7 @@ from nova.core.memory import MemoryStore
 from nova.core.tasks import TaskScheduler, TaskStore
 from nova.core.runtime import SystemStateMonitor
 from nova.core.runtime.tools import SimulationCore, build_default_registry
+from nova.core.computer.shell_integration import notifications_enabled, show_windows_toast
 
 settings = get_settings()
 
@@ -20,9 +21,22 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     get_provider()
     MemoryStore(settings.memory_db_path).initialize()
-    scheduler = TaskScheduler(TaskStore(settings.memory_db_path))
+    def notify_task(event: dict):
+        if notifications_enabled():
+            task = event.get("task", {})
+            result = event.get("result", {})
+            status = str(event.get("status", "unknown")).upper()
+            title = str(task.get("title", "Scheduled task"))[:100]
+            summary = "Completed successfully." if status == "SUCCESS" else str(result.get("error", "Task did not complete."))[:350]
+            show_windows_toast(f"NOVA task {status.lower()}: {title}", summary)
+
+    def notify_alert(alert: dict):
+        if notifications_enabled():
+            show_windows_toast(f"NOVA system {alert.get('severity', 'alert')}", str(alert.get("message", "System alert.")))
+
+    scheduler = TaskScheduler(TaskStore(settings.memory_db_path), on_event=notify_task)
     scheduler.start()
-    monitor = SystemStateMonitor(interval_seconds=2.0)
+    monitor = SystemStateMonitor(interval_seconds=2.0, on_alert=notify_alert)
     await monitor.start()
     app.state.task_scheduler = scheduler
     app.state.system_monitor = monitor
