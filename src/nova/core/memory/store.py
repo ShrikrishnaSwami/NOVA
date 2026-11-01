@@ -123,6 +123,14 @@ class MemoryStore:
                     ON memories(status, updated_at);
                 """
             )
+            # Additive migrations preserve existing local memory databases.
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(memories)")}
+            if "last_accessed_at" not in columns:
+                db.execute("ALTER TABLE memories ADD COLUMN last_accessed_at TEXT")
+            if "access_count" not in columns:
+                db.execute("ALTER TABLE memories ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0")
+            if "pinned" not in columns:
+                db.execute("ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
 
     def record_turn(self, conversation_id: str, user_text: str, assistant_text: str) -> None:
         now = _now()
