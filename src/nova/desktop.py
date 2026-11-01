@@ -14,8 +14,8 @@ import httpx
 from nova.config import get_settings
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient, QAction
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
+    QSystemTrayIcon,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -36,10 +38,36 @@ from PySide6.QtWidgets import (
 )
 
 
+from nova.core.computer.shell_integration import ShellIntegrationError, set_startup_enabled, startup_enabled, show_windows_toast
+
+
 API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 _HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(150.0, connect=5.0))
+
+
+
+
+class _GlobalHotkeyFilter(QAbstractNativeEventFilter):
+    """Bring NOVA forward on Ctrl+Alt+Space without installing a keyboard hook."""
+
+    def __init__(self, callback) -> None:
+        super().__init__()
+        self.callback = callback
+
+    def nativeEventFilter(self, event_type, message):
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+            try:
+                msg = ctypes.cast(int(message), ctypes.POINTER(wintypes.MSG)).contents
+                if msg.message == 0x0312 and msg.wParam == 0x4E4F:
+                    self.callback()
+                    return True, 0
+            except (TypeError, ValueError, OSError):
+                pass
+        return False, 0
 
 
 class ApiWorker(QThread):
@@ -231,6 +259,9 @@ class NovaWindow(QMainWindow):
         self.setWindowTitle("NOVA — Personal AI")
         self.resize(1180, 780)
         self.setMinimumSize(900, 620)
+        self._quit_requested = False
+        self._tray_available = False
+        self._hotkey_registered = False
         self.history: list[dict[str, str]] = []
         self.conversation_id = str(uuid4())
         self.worker: ApiWorker | None = None
@@ -243,6 +274,7 @@ class NovaWindow(QMainWindow):
         self._stream_flush_timer.setInterval(40)
         self._stream_flush_timer.timeout.connect(self._flush_stream_tokens)
         self._build_ui()
+        self._setup_windows_shell()
         self._check_status()
 
         self.status_timer = QTimer(self)
@@ -691,6 +723,11 @@ class NovaWindow(QMainWindow):
             self.streaming_body.setText(reply)
         self.history.append({"role": "assistant", "content": reply})
         self.last_response_text = reply
+        if self.isHidden():
+            try:
+                show_windows_toast("NOVA has replied", reply[:350])
+            except ShellIntegrationError:
+                pass
         self.model_badge.setText(f"MODEL  •  {data.get('model', 'CONNECTED')}")
         ttft, total = data.get("ttft_ms"), data.get("total_ms")
         memory = data.get("memory")
@@ -790,6 +827,95 @@ class NovaWindow(QMainWindow):
         self.connection_label.setText(message)
 
 
+
+    def _setup_windows_shell(self) -> None:
+        if os.name != "nt":
+            return
+        self.tray = QSystemTrayIcon(self)
+        self.tray.setToolTip("NOVA — Personal AI")
+        self.tray.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
+        menu = QMenu()
+        show_action = QAction("Open NOVA", self)
+        show_action.triggered.connect(self._show_from_tray)
+        menu.addAction(show_action)
+        menu.addSeparator()
+        self.startup_action = QAction("Start NOVA with Windows", self)
+        self.startup_action.setCheckable(True)
+        self.startup_action.setChecked(startup_enabled())
+        self.startup_action.triggered.connect(self._toggle_startup)
+        menu.addAction(self.startup_action)
+        notify_action = QAction("Send test notification", self)
+        notify_action.triggered.connect(self._test_notification)
+        menu.addAction(notify_action)
+        menu.addSeparator()
+        quit_action = QAction("Quit NOVA", self)
+        quit_action.triggered.connect(self._quit_nova)
+        menu.addAction(quit_action)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._tray_activated)
+        self.tray.show()
+        self._tray_available = self.tray.isVisible()
+
+        self._hotkey_filter = _GlobalHotkeyFilter(self._show_from_tray)
+        app = QApplication.instance()
+        if app:
+            app.installNativeEventFilter(self._hotkey_filter)
+        try:
+            import ctypes
+            self._hotkey_registered = bool(ctypes.windll.user32.RegisterHotKey(None, 0x4E4F, 0x0001 | 0x0002, 0x20))
+        except Exception:
+            self._hotkey_registered = False
+        if self._hotkey_registered:
+            self.tray.setToolTip("NOVA — Ctrl+Alt+Space to open")
+
+    def _tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self.input.setFocus()
+
+    def _toggle_startup(self, checked: bool) -> None:
+        try:
+            enabled = set_startup_enabled(checked)
+            self.startup_action.setChecked(enabled)
+            self.tray.showMessage("NOVA startup", "NOVA will start when you sign in." if enabled else "NOVA was removed from Windows startup.")
+        except ShellIntegrationError as exc:
+            self.startup_action.setChecked(startup_enabled())
+            QMessageBox.warning(self, "Startup integration unavailable", str(exc))
+
+    def _test_notification(self) -> None:
+        try:
+            show_windows_toast("NOVA notifications are working", "Windows native notifications are connected.")
+        except ShellIntegrationError as exc:
+            QMessageBox.warning(self, "Notifications unavailable", str(exc))
+
+    def _quit_nova(self) -> None:
+        self._quit_requested = True
+        if self._hotkey_registered:
+            try:
+                import ctypes
+                ctypes.windll.user32.UnregisterHotKey(None, 0x4E4F)
+            except Exception:
+                pass
+            self._hotkey_registered = False
+        if hasattr(self, "tray"):
+            self.tray.hide()
+        app = QApplication.instance()
+        if app:
+            app.quit()
+
+    def closeEvent(self, event) -> None:
+        if self._quit_requested or not self._tray_available:
+            event.accept()
+            return
+        self.hide()
+        if hasattr(self, "tray"):
+            self.tray.showMessage("NOVA is still running", "Use Ctrl+Alt+Space or the tray icon to reopen NOVA.")
+        event.ignore()
 
     def _open_computer_controls(self) -> None:
         dialog = ComputerControlsDialog(self)
