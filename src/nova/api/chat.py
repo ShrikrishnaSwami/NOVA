@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from nova.config import get_settings
 from nova.core.ai import ChatMessage, get_provider
 from nova.core.memory import MemoryStore
+from nova.core.runtime.persona import NOVA_SYSTEM_PROMPT
 
 router = APIRouter(tags=["conversation"])
 
@@ -45,7 +46,7 @@ def _conversation_id(request: ChatRequest) -> str:
 
 def _messages(request: ChatRequest) -> list[ChatMessage]:
     settings = get_settings()
-    messages: list[ChatMessage] = []
+    messages: list[ChatMessage] = [ChatMessage(role="system", content=NOVA_SYSTEM_PROMPT)]
     memories = _store().retrieve(request.message, limit=4)
     if memories:
         facts = "\n".join(f"- {item['content']}" for item in memories)
