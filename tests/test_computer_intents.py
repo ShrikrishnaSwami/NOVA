@@ -53,4 +53,4 @@ def test_application_candidates_match_short_app_names() -> None:
     ]
     assert application_candidates("Launch Chrome", apps) == [apps[0]]
     assert application_candidates("Open Word", apps) == [apps[1]]
-    assert application_candidates("Open VS Code", apps) == []
+    assert application_candidates("Open Studio Code", apps) == [apps[2]]
