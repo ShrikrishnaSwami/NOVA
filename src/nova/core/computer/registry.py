@@ -437,33 +437,39 @@ class ComputerToolRegistry:
                         continue
                 result = {"path": str(folder), "entries": entries}
             elif action == "search_files":
-                root = self._resolve_allowed_path(str(parameters.get("root", "")))
-                if not root.is_dir():
+                raw_root = str(parameters.get("root", "")).strip()
+                roots = [self._resolve_allowed_path(raw_root)] if raw_root else list(self.allowed_roots)
+                if not roots:
+                    raise ComputerToolError("No accessible folders are available to search.")
+                if any(not root.is_dir() for root in roots):
                     raise ComputerToolError("The search root is not a folder.")
                 query = str(parameters.get("query", "")).strip().lower()
                 if not query or len(query) > 120:
                     raise ComputerToolError("Enter a search term between 1 and 120 characters.")
                 matches: list[str] = []
-                for current, directories, files in os.walk(root, followlinks=False):
-                    current_path = Path(current)
-                    directories[:] = [
-                        name for name in directories
-                        if not _is_link_or_junction(current_path / name)
-                    ]
-                    for name in directories + files:
-                        if query in name.lower():
-                            candidate = current_path / name
-                            try:
-                                resolved = candidate.resolve(strict=True)
-                                resolved.relative_to(root)
-                            except (OSError, RuntimeError, ValueError):
-                                continue
-                            matches.append(str(resolved))
-                            if len(matches) >= _MAX_SEARCH_RESULTS:
-                                break
+                for root in roots:
+                    for current, directories, files in os.walk(root, followlinks=False):
+                        current_path = Path(current)
+                        directories[:] = [
+                            name for name in directories
+                            if not _is_link_or_junction(current_path / name)
+                        ]
+                        for name in directories + files:
+                            if query in name.lower():
+                                candidate = current_path / name
+                                try:
+                                    resolved = candidate.resolve(strict=True)
+                                    resolved.relative_to(root)
+                                except (OSError, RuntimeError, ValueError):
+                                    continue
+                                matches.append(str(resolved))
+                                if len(matches) >= _MAX_SEARCH_RESULTS:
+                                    break
+                        if len(matches) >= _MAX_SEARCH_RESULTS:
+                            break
                     if len(matches) >= _MAX_SEARCH_RESULTS:
                         break
-                result = {"root": str(root), "query": query, "matches": matches, "truncated": len(matches) >= _MAX_SEARCH_RESULTS}
+                result = {"root": raw_root or "all accessible locations", "query": query, "matches": matches, "truncated": len(matches) >= _MAX_SEARCH_RESULTS}
             elif action == "search_file_contents":
                 query = str(parameters.get("query", "")).strip().casefold()
                 if not query or len(query) > 200:
