@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import match_open_application_command
+from nova.core.computer.intents import match_open_application_command, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -484,6 +484,21 @@ class NovaWindow(QMainWindow):
                 f"Opened {app_name}."
                 if result
                 else f"I didn't open {app_name}. The action was cancelled or blocked."
+            )
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
+            return
+
+        unresolved_target = requested_application_name(message)
+        if unresolved_target:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            reply = (
+                f"I couldn't find an installed app matching '{unresolved_target}'. "
+                "Open Computer controls to inspect the discovered app list. "
+                "NOVA won't claim it opened an app unless Windows launch was actually requested."
             )
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
