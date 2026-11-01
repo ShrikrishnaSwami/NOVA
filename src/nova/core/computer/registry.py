@@ -486,7 +486,7 @@ class ComputerToolRegistry:
                                 )
                                 if query in text.casefold():
                                     matches.append({"path": str(candidate), "preview": text[:240].replace("\\n", " ")})
-                            except (OSError, UnicodeError):
+                            except (OSError, UnicodeError, ComputerToolError, ValueError):
                                 continue
                             if len(matches) >= _MAX_SEARCH_RESULTS:
                                 break
