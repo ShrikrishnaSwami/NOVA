@@ -8,6 +8,7 @@ import sys
 import subprocess
 import threading
 from pathlib import Path
+from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Any
 
@@ -328,6 +329,11 @@ class NovaWindow(QMainWindow):
         computer_button.setObjectName("newChat")
         computer_button.clicked.connect(self._open_computer_controls)
         side.addWidget(computer_button)
+
+        tasks_button = QPushButton("◷   Scheduled tasks")
+        tasks_button.setObjectName("newChat")
+        tasks_button.clicked.connect(self._open_task_manager)
+        side.addWidget(tasks_button)
 
         nav_label = QLabel("WORKSPACE")
         nav_label.setObjectName("eyebrow")
@@ -1087,6 +1093,148 @@ class NovaWindow(QMainWindow):
         if hasattr(self, "tray") and notifications_enabled():
             self.tray.showMessage("NOVA is still running", "Use Ctrl+Alt+Space or the tray icon to reopen NOVA.")
         event.ignore()
+
+    def _open_task_manager(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("NOVA scheduled tasks")
+        dialog.resize(760, 520)
+        layout = QVBoxLayout(dialog)
+        description = QLabel("Approved tasks run locally on schedule. The current scheduler supports read-only system and storage reports.")
+        description.setWordWrap(True)
+        description.setObjectName("muted")
+        layout.addWidget(description)
+        items = QListWidget()
+        layout.addWidget(items, 1)
+        status = QLabel("Tasks are stored locally with NOVA's memory database.")
+        status.setObjectName("muted")
+        layout.addWidget(status)
+
+        def refresh() -> None:
+            items.clear()
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/tasks")
+                response.raise_for_status()
+                tasks = response.json().get("tasks", [])
+                for task in tasks:
+                    label = f"{task['status'].replace('_', ' ').upper()}  ·  {task['title']}  ·  {task['action_id']}  ·  {task['schedule_at']}  ·  {task['recurrence']}"
+                    item = QListWidgetItem(label)
+                    item.setData(Qt.ItemDataRole.UserRole, task)
+                    items.addItem(item)
+                status.setText(f"{len(tasks)} task(s). Pending approval tasks will not run.")
+            except Exception as exc:
+                status.setText(f"Task service unavailable: {exc}")
+
+        def selected_task() -> dict | None:
+            item = items.currentItem()
+            return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+        def create_task() -> None:
+            title, accepted = QInputDialog.getText(dialog, "New scheduled task", "Task name:")
+            if not accepted or not title.strip():
+                return
+            action_label, accepted = QInputDialog.getItem(
+                dialog, "Task action", "Choose a read-only action:",
+                ["System status snapshot", "Storage usage report"], 0, False,
+            )
+            if not accepted:
+                return
+            action_id = "system.snapshot" if action_label.startswith("System") else "storage.report"
+            default_time = (datetime.now().astimezone() + timedelta(hours=1)).isoformat(timespec="minutes")
+            schedule_at, accepted = QInputDialog.getText(
+                dialog, "Schedule time", "Enter a future ISO date/time with timezone offset:",
+                text=default_time,
+            )
+            if not accepted or not schedule_at.strip():
+                return
+            recurrence, accepted = QInputDialog.getItem(
+                dialog, "Repeat task", "Choose recurrence:", ["once", "daily", "weekly"], 0, False,
+            )
+            if not accepted:
+                return
+            try:
+                response = _HTTP_CLIENT.post(f"{API_ROOT}/tasks", json={
+                    "title": title.strip(), "action_id": action_id, "parameters": {},
+                    "schedule_at": schedule_at.strip(), "recurrence": recurrence,
+                })
+                response.raise_for_status()
+                status.setText("Task created. Review it and select Approve before it can run.")
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not create task", str(exc))
+
+        def approve_task() -> None:
+            task = selected_task()
+            if not task:
+                return
+            if task.get("status") != "pending_approval":
+                QMessageBox.information(dialog, "Approval not needed", "Only pending tasks can be approved.")
+                return
+            answer = QMessageBox.question(
+                dialog, "Approve scheduled task?",
+                f"Approve this exact task?\n\n{task['title']}\nAction: {task['action_id']}\nNext run: {task['schedule_at']}\nRecurrence: {task['recurrence']}\n\nThis action is read-only and will run automatically at the scheduled time.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                response = _HTTP_CLIENT.post(f"{API_ROOT}/tasks/{task['id']}/approve")
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not approve task", str(exc))
+
+        def set_task_state(action: str) -> None:
+            task = selected_task()
+            if not task:
+                return
+            endpoint = "pause" if action == "pause" else "cancel"
+            answer = QMessageBox.question(
+                dialog, f"{action.title()} task?",
+                f"{action.title()} '{task['title']}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                response = _HTTP_CLIENT.post(f"{API_ROOT}/tasks/{task['id']}/{endpoint}")
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, f"Could not {action} task", str(exc))
+
+        def show_history() -> None:
+            task = selected_task()
+            if not task:
+                return
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/tasks/{task['id']}/history")
+                response.raise_for_status()
+                runs = response.json().get("runs", [])
+                if not runs:
+                    QMessageBox.information(dialog, "Task history", "This task has not run yet.")
+                    return
+                lines = [f"{run['finished_at']} · {run['outcome'].upper()} · {run['result']}" for run in runs]
+                QMessageBox.information(dialog, "Task execution history", "\n\n".join(lines))
+            except Exception as exc:
+                QMessageBox.warning(dialog, "History unavailable", str(exc))
+
+        actions = QHBoxLayout()
+        for label, callback in [
+            ("Create task", create_task), ("Approve", approve_task),
+            ("Pause", lambda: set_task_state("pause")),
+            ("Cancel", lambda: set_task_state("cancel")), ("History", show_history),
+        ]:
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            actions.addWidget(button)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        refresh()
+        dialog.exec()
 
     def _open_computer_controls(self) -> None:
         dialog = ComputerControlsDialog(self)
