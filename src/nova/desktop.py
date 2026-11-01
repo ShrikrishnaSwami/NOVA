@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import application_candidates, match_open_application_command, requested_application_name
+from nova.core.computer.intents import application_candidates, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -460,7 +460,6 @@ class NovaWindow(QMainWindow):
         # Resolve direct launch requests against the live Windows application catalogue.
         requested_target = requested_application_name(message)
         requested_app = None
-        discovery_error = None
         discovered_apps = []
         if requested_target:
             try:
@@ -487,8 +486,8 @@ class NovaWindow(QMainWindow):
                         )
                     else:
                         return
-            except Exception as exc:
-                discovery_error = str(exc)
+            except Exception:
+                discovered_apps = []
 
         if requested_app:
             app_name = requested_app["name"]
