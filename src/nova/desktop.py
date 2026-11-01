@@ -14,7 +14,7 @@ from uuid import uuid4
 from typing import Any
 
 import httpx
-from nova.config import environment_file, get_settings, user_data_dir
+from nova.config import environment_file, get_settings, get_vosk_model_path, user_data_dir
 from nova.core.computer.automation import AutomationEngine, AutomationPlanError, execute_plan
 from nova.core.tasks.intents import plan_task_intent
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
@@ -1152,7 +1152,7 @@ class NovaWindow(QMainWindow):
             self.connection_label.setText("Stopping microphone…")
             return
 
-        model_path = get_settings().vosk_model_path.strip()
+        model_path = get_vosk_model_path()
         if not model_path:
             QMessageBox.information(
                 self,
