@@ -1,22 +1,22 @@
 from nova.core.computer.intents import match_open_application_command
 
 
-def test_match_open_calculator_command() -> None:
-    assert match_open_application_command("Open Calculator") == "calculator"
-    assert match_open_application_command("please launch the calc please") == "calculator"
+APPS = [
+    {"name": "Spotify", "app_id": r"C:\\Start Menu\\Spotify.lnk"},
+    {"name": "Google Chrome", "app_id": r"C:\\Start Menu\\Chrome.lnk"},
+    {"name": "Windows Settings", "app_id": "windows-settings"},
+]
 
 
-def test_match_windows_settings_command() -> None:
-    assert match_open_application_command("Open Settings") == "windows settings"
-    assert match_open_application_command("Open Windows Settings") == "windows settings"
+def test_match_discovered_app_names() -> None:
+    assert match_open_application_command("Open Spotify", APPS) == APPS[0]
+    assert match_open_application_command("launch Google Chrome", APPS) == APPS[1]
+    assert match_open_application_command("Open Settings", APPS) == APPS[2]
 
 
-def test_match_other_allowlisted_apps() -> None:
-    assert match_open_application_command("Start Notepad.") == "notepad"
-    assert match_open_application_command("open file explorer") == "file explorer"
-
-
-def test_do_not_match_ambiguous_or_unlisted_commands() -> None:
-    assert match_open_application_command("What is a calculator?") is None
-    assert match_open_application_command("Open PowerShell") is None
-    assert match_open_application_command("Open Calculator and delete files") is None
+def test_do_not_match_unknown_or_ambiguous_apps() -> None:
+    assert match_open_application_command("What is Spotify?", APPS) is None
+    assert match_open_application_command("Open PowerShell", APPS) is None
+    duplicate = APPS + [{"name": "Spotify", "app_id": "another-id"}]
+    assert match_open_application_command("Open Spotify", duplicate) is None
+    assert match_open_application_command("Open Spotify and delete files", APPS) is None
