@@ -10,7 +10,9 @@ NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional 
 - Optional dependency group: `desktop` installs PySide6.
 - The desktop client uses a worker thread for HTTP requests so model inference does not freeze the UI.
 - The animated identity visual is drawn with Qt primitives to avoid external assets and keep GPU requirements modest.
-- The UI stores conversation history in memory for the current desktop session only. Durable memory is a separate future service.
+- The backend persists conversation turns in SQLite; the desktop assigns a stable conversation ID for each chat session.
+- The backend retrieves relevant approved memories and adds them as bounded context to chat requests.
+- The desktop remains a thin client; memory management is exposed through typed API endpoints.
 - The backend URL can be overridden with `NOVA_API_URL`.
 
 ## AI provider layer
@@ -42,7 +44,7 @@ Provider adapter
 Bionic / local model runtime
 ```
 
-Planned services will add memory and permission-scoped tools beside the provider adapter.
+The SQLite memory service sits beside the provider adapter and is independent of model vendor/runtime.
 
 ## Trust boundaries
 
@@ -60,7 +62,7 @@ Planned services will add memory and permission-scoped tools beside the provider
 2. Provider contract, setup-mode chat, and OpenAI-compatible adapter.
 3. Local model runtime integration.
 4. First desktop UI with threaded API requests.
-5. SQLite memory with explicit retention and deletion controls.
+5. SQLite conversation history and local vector memory with approval, editing, and deletion controls.
 6. Permission manager, tool registry, and audit log.
 7. Streaming text conversation.
 8. Voice pipeline and small, allowlisted Windows tools.
@@ -71,3 +73,10 @@ Planned services will add memory and permission-scoped tools beside the provider
 - The backend reuses one provider instance and asynchronous HTTPX connection pool, closed during FastAPI shutdown.
 - `POST /chat/stream` emits token events followed by `ttft_ms` and `total_ms`; `POST /chat` remains supported.
 - Keeping model weights resident is a model-runtime setting. There is no universal keep-alive parameter across OpenAI-compatible servers.
+
+
+## Persistent memory
+
+The memory service is implemented in `src/nova/core/memory/store.py`. It uses the Python standard-library SQLite driver and stores conversations, messages, memory records, and normalized 256-dimensional feature-hash vectors. Retrieval ranks approved memories by cosine similarity locally. The deterministic encoder avoids a network dependency, external embedding service, model download, and GPU requirement; it is intentionally a lightweight first vector-retrieval implementation rather than a transformer embedding model.
+
+Memory capture uses a hybrid policy: explicit remember requests and recognized low-risk preferences/projects are stored automatically; selected high-impact statements are queued as pending; sensitive credential and personal-identifier patterns are rejected. The API exposes approval, edit, and delete operations. Memory is inserted as contextual data, never as executable instructions.
