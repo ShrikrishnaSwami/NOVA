@@ -992,10 +992,11 @@ class NovaWindow(QMainWindow):
         self._start_chat_request(
             "The user approved the proposed registered tools. Here are their actual results:\\n"
             + result_text
-            + "\\nRespond to the user's original request using these results. Clearly distinguish simulation results from real system actions."
+            + "\\nRespond to the user's original request using these results. Clearly distinguish simulation results from real system actions.",
+            include_latest_user=True,
         )
 
-    def _start_chat_request(self, message: str) -> None:
+    def _start_chat_request(self, message: str, *, include_latest_user: bool = False) -> None:
         self.send_button.setEnabled(False)
         self.send_button.setText("Thinking…")
         self.connection_label.setText("NOVA is generating…")
