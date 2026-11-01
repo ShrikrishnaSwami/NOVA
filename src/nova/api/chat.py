@@ -67,3 +67,21 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield "data: " + json.dumps({"type": "error", "message": "NOVA could not get a response from the configured AI provider."}) + "\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("/system/ai", tags=["system"])
+async def ai_status() -> dict[str, str | bool]:
+    """Report provider configuration without exposing credentials."""
+    settings = get_settings()
+    provider = settings.ai_provider.strip().lower()
+    configured = provider == "echo" or (
+        provider == "openai_compatible"
+        and bool(settings.ai_base_url.strip())
+        and bool(settings.ai_model.strip())
+    )
+    return {
+        "provider": provider,
+        "model": settings.ai_model if provider == "openai_compatible" else "setup-mode",
+        "configured": configured,
+        "mode": "setup" if provider == "echo" else "model-backed",
+    }
