@@ -11,7 +11,7 @@ class EchoProvider:
 
     async def complete(self, messages: Sequence[ChatMessage]) -> ChatResult:
         latest = next((m.content for m in reversed(messages) if m.role == "user"), "")
-        content = ("I received your message. My conversation API is working, but I'm currently in setup mode. Connect a local or cloud model in your .env file to give me full AI capabilities." if latest else "I'm NOVA. Send me a message to get started.")
+        content = ("I received your message. NOVA is currently in setup mode. Connect a local or cloud model in your .env file to enable full AI capabilities." if latest else "I'm NOVA. Send me a message to get started.")
         return ChatResult(content=content, provider=self.name, model=self.model)
 
     async def stream(self, messages: Sequence[ChatMessage]) -> AsyncIterator[str]:
