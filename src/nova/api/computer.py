@@ -17,7 +17,7 @@ def _registry() -> ComputerToolRegistry:
 
 
 class ComputerActionRequest(BaseModel):
-    action: Literal["open_application", "list_directory", "search_files", "read_text_file"]
+    action: Literal["open_application", "open_path", "list_directory", "search_files", "search_file_contents", "read_text_file"]
     parameters: dict[str, Any] = Field(default_factory=dict)
     approved: bool = False
 
