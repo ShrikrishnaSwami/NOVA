@@ -1,4 +1,4 @@
-"Application entry point for NOVA's local API and background services."""
+"""Application entry point for NOVA's local API and background services."""
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from nova.api.chat import router as chat_router
