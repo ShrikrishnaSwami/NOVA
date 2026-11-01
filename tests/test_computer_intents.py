@@ -12,9 +12,9 @@ APPS = [
 def test_match_discovered_app_names() -> None:
     assert match_open_application_command("Open Spotify", APPS) == APPS[0]
     assert match_open_application_command("launch Google Chrome", APPS) == APPS[1]
-    assert match_open_application_command("open Outlook", APPS) == APPS[3]
-    assert match_open_application_command("Please open Outlook!", APPS) == APPS[3]
-    assert match_open_application_command("Open Settings", APPS) == APPS[2]
+    assert match_open_application_command("open Outlook", APPS) == APPS[2]
+    assert match_open_application_command("Please open Outlook!", APPS) == APPS[2]
+    assert match_open_application_command("Open Settings", APPS) == APPS[3]
 
 
 def test_do_not_match_unknown_or_ambiguous_apps() -> None:
