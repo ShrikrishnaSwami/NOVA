@@ -68,3 +68,23 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return one cached settings instance for the application."""
     return Settings(_env_file=environment_file())
+
+
+def get_vosk_model_path() -> str:
+    """Resolve an explicitly configured or bundled local Vosk model directory."""
+    configured = get_settings().vosk_model_path.strip()
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            path = user_data_dir() / path
+        return str(path)
+
+    model_name = "vosk-model-small-en-us-0.15"
+    if getattr(__import__("sys"), "frozen", False):
+        base = Path(__import__("sys").executable).resolve().parent
+    else:
+        base = Path(__file__).resolve().parents[2]
+    candidate = base / model_name
+    if candidate.is_dir():
+        return str(candidate)
+    return str(base / "models" / model_name)
