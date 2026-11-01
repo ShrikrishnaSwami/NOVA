@@ -164,15 +164,18 @@ class ComputerToolRegistry:
         """Execute one registered operation after the UI has obtained explicit approval."""
         try:
             if action == "open_application":
-                app = str(parameters.get("app", "")).strip().lower()
-                executable = _ALLOWED_APPS.get(app)
-                if not executable:
-                    raise ComputerToolError("That application is not on NOVA's allowlist.")
-                if executable == "ms-settings:":
-                    # Fixed Windows Settings URI; no user-controlled command or shell.
-                    subprocess.Popen(["explorer.exe", executable], shell=False, close_fds=True)
+                app_id = str(parameters.get("app_id", "")).strip()
+                selected = next(
+                    (item for item in self.discover_applications() if item["app_id"] == app_id),
+                    None,
+                )
+                if selected is None:
+                    raise ComputerToolError("That application is not in the current Windows Start Menu catalogue. Refresh the app list and try again.")
+                app = selected["name"]
+                if app_id == _WINDOWS_SETTINGS_ID:
+                    subprocess.Popen(["explorer.exe", "ms-settings:"], shell=False, close_fds=True)
                 else:
-                    subprocess.Popen([executable], shell=False, close_fds=True)
+                    _start_shortcut(app_id)
                 result = {"message": f"Opened {app}."}
             elif action == "list_directory":
                 folder = self._resolve_allowed_path(str(parameters.get("path", "")))
