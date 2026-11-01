@@ -197,7 +197,7 @@ def plan_window_intent(message: str) -> dict[str, str] | None:
     )
     if not match:
         return None
-    verb = re.match(r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?(switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore)\b", text, re.IGNORECASE)
+    verb = re.match(r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?(switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore|close)\b", text, re.IGNORECASE)
     if not verb:
         return None
     target = match.group(1).strip().strip('"')

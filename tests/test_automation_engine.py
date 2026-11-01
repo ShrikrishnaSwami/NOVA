@@ -61,3 +61,10 @@ def test_engine_accepts_window_action_from_conversational_planner() -> None:
     assert plan is not None
     validated = AutomationEngine().validate_plan(plan)
     assert validated[1]["action_id"] == "window.minimize"
+
+
+
+def test_engine_accepts_graceful_window_close_action() -> None:
+    plan = [{"kind": "window", "target": "Notepad", "action": "close"}]
+    validated = AutomationEngine().validate_plan(plan)
+    assert validated[0]["action_id"] == "window.close"

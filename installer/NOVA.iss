@@ -1,6 +1,6 @@
 ; NOVA per-user Windows installer. Build after scripts/build_windows.ps1.
 #define MyAppName "NOVA"
-#define MyAppVersion "0.1.4"
+#define MyAppVersion "0.1.5"
 #define MyAppPublisher "NOVA contributors"
 #define MyAppExeName "NOVA.exe"
 

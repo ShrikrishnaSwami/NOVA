@@ -117,3 +117,11 @@ def test_multi_step_planner_requires_supported_bounded_steps() -> None:
     assert plan[1]["kind"] == "system"
     assert plan_multi_step_intent("Set volume to 35 then delete my files") is None
     assert plan_multi_step_intent("Set volume to 35 then change brightness to 60 then search Windows for notes then set volume to 20 then change brightness to 30 then set volume to 10") is None
+
+
+
+def test_window_planner_recognizes_graceful_close_request() -> None:
+    from nova.core.computer.intents import plan_window_intent
+
+    assert plan_window_intent("Close Chrome") == {"target": "Chrome", "action": "close"}
+    assert plan_window_intent("Please close the Notepad window") == {"target": "Notepad", "action": "close"}

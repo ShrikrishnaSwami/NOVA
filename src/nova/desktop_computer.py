@@ -298,13 +298,14 @@ class ComputerControlsDialog(QDialog):
             target = windows[labels.index(selected)]
             action, accepted = QInputDialog.getItem(
                 self, "Window action", "Choose what NOVA should do:",
-                ["Focus / switch to", "Minimize", "Restore", "Maximize"], 0, False,
+                ["Focus / switch to", "Minimize", "Restore", "Maximize", "Close window (may prompt to save)"], 0, False,
             )
             if not accepted:
                 return
             action_id = {
                 "Focus / switch to": "focus", "Minimize": "minimize",
                 "Restore": "restore", "Maximize": "maximize",
+                "Close window (may prompt to save)": "close",
             }[action]
             answer = QMessageBox.question(
                 self, "Approve window control?",
@@ -332,14 +333,16 @@ class ComputerControlsDialog(QDialog):
 
     def execute_window_target(self, target: dict, action: str) -> dict | None:
         """Ask for one confirmation, then perform one selected window action."""
-        labels = {"focus": "switch to", "minimize": "minimize", "restore": "restore", "maximize": "maximize"}
+        labels = {"focus": "switch to", "minimize": "minimize", "restore": "restore", "maximize": "maximize", "close": "close"}
         if action not in labels:
             QMessageBox.warning(self, "Unsupported window action", "That window action is not supported.")
             return None
         title = str(target.get("title") or "selected window")
         answer = QMessageBox.question(
             self, "Approve window control?",
-            f"NOVA will {labels[action]} this window:\n\n{title}\n\nAllow this one action?",
+            f"NOVA will {labels[action]} this window:\n\n{title}\n\n"
+            + ("The app may prompt you to save changes. NOVA will not force-quit it.\n\n" if action == "close" else "")
+            + "Allow this one action?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

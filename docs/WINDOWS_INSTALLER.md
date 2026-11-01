@@ -19,7 +19,7 @@ pytest -q
 & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" "installer\NOVA.iss"
 ~~~~
 
-The current packaged release is NOVA 0.1.4 (the next sequential installer release). The portable application folder is created under `dist\NOVA`; its main executable is `dist\NOVA\NOVA.exe`. Keep the entire folder together when moving or running it—the executable depends on the bundled libraries and resources beside it. The installer is `dist\NOVA-Setup-0.1.4.exe`.
+The current packaged release is NOVA 0.1.5 (the next sequential installer release). The portable application folder is created under `dist\NOVA`; its main executable is `dist\NOVA\NOVA.exe`. Keep the entire folder together when moving or running it—the executable depends on the bundled libraries and resources beside it. The installer is `dist\NOVA-Setup-0.1.5.exe`.
 
 The GitHub Actions **Windows installer** workflow runs the test suite and creates two downloadable artifacts:
 

@@ -19,3 +19,10 @@ def test_text_entry_api_requires_explicit_approval() -> None:
         json={"handle": 123, "name": "Search", "text": "hello"},
     )
     assert response.status_code == 403
+
+
+
+def test_window_close_endpoint_requires_explicit_approval() -> None:
+    client = TestClient(app)
+    response = client.post("/computer/windows/actions", json={"handle": 123, "action": "close"})
+    assert response.status_code == 403

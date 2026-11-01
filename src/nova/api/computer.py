@@ -76,7 +76,7 @@ def computer_windows(limit: int = Query(default=100, ge=1, le=300)) -> dict[str,
 
 class WindowControlRequest(BaseModel):
     handle: int = Field(ge=1)
-    action: Literal["focus", "minimize", "restore", "maximize"]
+    action: Literal["focus", "minimize", "restore", "maximize", "close"]
     approved: bool = False
 
 

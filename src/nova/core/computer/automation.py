@@ -28,6 +28,7 @@ _ACTIONS = {
         ActionContract("window.minimize", "Minimize a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
         ActionContract("window.maximize", "Maximize a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
         ActionContract("window.restore", "Restore a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
+        ActionContract("window.close", "Request a graceful window close", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
     )
 }
 

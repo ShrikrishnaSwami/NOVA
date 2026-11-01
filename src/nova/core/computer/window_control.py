@@ -1,7 +1,6 @@
 """Explicitly approved controls for visible Windows application windows.
 
-Only operates on a currently existing, visible top-level window. It does not
-send keystrokes, inspect window contents, or close applications.
+Only operates on a currently existing, visible top-level window. It does not send keystrokes or inspect window contents. Close uses the application's normal WM_CLOSE path; it never force-terminates a process.
 """
 from __future__ import annotations
 
@@ -16,8 +15,8 @@ class WindowControlError(ValueError):
 def control_window(handle: int, action: str) -> dict[str, Any]:
     if os.name != "nt":
         raise WindowControlError("Window controls are available only on Windows.")
-    if action not in {"focus", "minimize", "restore", "maximize"}:
-        raise WindowControlError("Supported actions are focus, minimize, restore, and maximize.")
+    if action not in {"focus", "minimize", "restore", "maximize", "close"}:
+        raise WindowControlError("Supported actions are focus, minimize, restore, maximize, and close.")
 
     import ctypes
     from ctypes import wintypes
@@ -39,6 +38,14 @@ def control_window(handle: int, action: str) -> dict[str, Any]:
         user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
     elif action == "maximize":
         user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+    elif action == "close":
+        # WM_CLOSE lets the app show its own unsaved-work prompt; never force-quit.
+        if not user32.PostMessageW(hwnd, 0x0010, 0, 0):
+            raise WindowControlError("Windows could not send a graceful close request to that window.")
 
-    return {"handle": int(handle), "title": title, "action": action,
-            "message": f"{action.capitalize()} requested for {title or 'selected window'}."}
+    message = (
+        f"Sent a graceful close request to {title or 'selected window'}. The app may ask you to save changes."
+        if action == "close"
+        else f"{action.capitalize()} requested for {title or 'selected window'}."
+    )
+    return {"handle": int(handle), "title": title, "action": action, "message": message}
