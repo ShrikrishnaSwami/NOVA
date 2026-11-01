@@ -1,4 +1,4 @@
-from nova.core.computer.intents import match_open_application_command, requested_application_name
+from nova.core.computer.intents import application_candidates, match_open_application_command, requested_application_name
 
 
 APPS = [
@@ -33,3 +33,24 @@ def test_reject_unknown_ambiguous_and_non_launch_requests() -> None:
 
     duplicate = APPS + [{"name": "Outlook classic", "app_id": "classic-outlook"}]
     assert match_open_application_command("Open Outlook", duplicate) is None
+
+
+def test_application_candidates_keep_ambiguous_choices_for_user() -> None:
+    apps = [
+        {"name": "Outlook (new)", "app_id": "new"},
+        {"name": "Outlook classic", "app_id": "classic"},
+        {"name": "Microsoft Teams", "app_id": "teams"},
+    ]
+    candidates = application_candidates("Open Outlook", apps)
+    assert {app["app_id"] for app in candidates} == {"new", "classic"}
+
+
+def test_application_candidates_match_short_app_names() -> None:
+    apps = [
+        {"name": "Google Chrome", "app_id": "chrome"},
+        {"name": "Microsoft Word", "app_id": "word"},
+        {"name": "Visual Studio Code", "app_id": "vscode"},
+    ]
+    assert application_candidates("Launch Chrome", apps) == [apps[0]]
+    assert application_candidates("Open Word", apps) == [apps[1]]
+    assert application_candidates("Open VS Code", apps) == []
