@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings, user_data_dir
+from nova.core.computer.automation import AutomationEngine, AutomationPlanError
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
@@ -496,6 +497,11 @@ class NovaWindow(QMainWindow):
         # A chained request is planned completely before any step runs.
         multi_plan = plan_multi_step_intent(message)
         if multi_plan:
+            try:
+                multi_plan = AutomationEngine().validate_plan(multi_plan)
+            except AutomationPlanError as exc:
+                self._add_message("NOVA", f"I couldn't safely validate that task: {exc}")
+                return
             self.input.clear()
             self._add_message("YOU", message)
             self.history.append({"role": "user", "content": message})
