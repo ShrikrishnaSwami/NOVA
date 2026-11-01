@@ -12,7 +12,7 @@ from uuid import uuid4
 from typing import Any
 
 import httpx
-from nova.config import get_settings, user_data_dir
+from nova.config import environment_file, get_settings, user_data_dir
 from nova.core.computer.automation import AutomationEngine, AutomationPlanError
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
@@ -953,6 +953,9 @@ class NovaWindow(QMainWindow):
         controls_action = QAction("Computer controls", self)
         controls_action.triggered.connect(self._open_computer_controls)
         menu.addAction(controls_action)
+        settings_action = QAction("Open NOVA settings", self)
+        settings_action.triggered.connect(self._open_user_settings)
+        menu.addAction(settings_action)
         menu.addSeparator()
         self.startup_action = QAction("Start NOVA with Windows", self)
         self.startup_action.setCheckable(True)
@@ -992,6 +995,16 @@ class NovaWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
         self.input.setFocus()
+
+    def _open_user_settings(self) -> None:
+        path = environment_file()
+        if not path.exists():
+            QMessageBox.information(self, "NOVA settings", f"No settings file exists yet. Create one at:\n{path}")
+            return
+        try:
+            os.startfile(str(path))
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not open settings", str(exc))
 
     def _toggle_startup(self, checked: bool) -> None:
         try:
