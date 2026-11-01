@@ -1,69 +1,62 @@
 # Local voice setup
 
-NOVA's optional voice features are fully local:
+NOVA's voice features run locally:
 
 - **Speech input:** Vosk offline speech recognition.
+- **Wake word:** local constrained-grammar Vosk recognition using the phrase **"Hey NOVA"**.
 - **Speech output:** pyttsx3 using voices already installed in Windows (SAPI5).
 - **Microphone capture:** sounddevice / PortAudio.
 - **No cloud speech APIs:** audio is not uploaded by NOVA.
 
-Voice input is deliberately push-to-talk. NOVA does not keep the microphone open in the background and does not implement an always-listening wake word.
+## Installed Windows application
 
-## 1. Install optional packages
+The Windows packaging build downloads and bundles the small English model
+`vosk-model-small-en-us-0.15` beside NOVA.exe. The installed app finds this
+model automatically. You do not need to edit source code, run a download
+command, or set `NOVA_VOSK_MODEL_PATH` for the packaged app.
 
-From the repository root with the virtual environment active:
+During installation, NOVA can be configured to start with Windows in the
+notification area. Enable **Wake word** in the desktop composer once. That
+preference is saved locally, so on subsequent sign-ins NOVA starts hidden,
+loads its bundled model, and listens for "Hey NOVA". The wake-word preference
+is off by default and can be switched off immediately from the same button.
+The tray icon and composer indicate whether the microphone listener is active.
+
+When activated, NOVA stops any current speech playback, captures your command,
+and sends it through the normal chat and approved-tool pipeline. When a reply
+arrives, NOVA reads it aloud and then returns to wake-word standby. Push-to-talk
+remains available as an alternative.
+
+## Development checkout
+
+Install the optional packages:
 
 ```powershell
 pip install -e ".[desktop,voice]"
 ```
 
-## 2. Download an offline Vosk model
-
 Download an English model from the official Vosk model page:
-
 https://alphacephei.com/vosk/models
 
-For a modest download, start with **vosk-model-small-en-us-0.15**. Extract the archive somewhere permanent, for example:
+For a modest download, use `vosk-model-small-en-us-0.15`. Extract it to:
 
 ```text
 C:\NOVA\models\vosk-model-small-en-us-0.15
 ```
 
-The folder selected by the environment variable must contain Vosk model subfolders such as `am`, `conf`, `graph`, and `ivector` (if present). Do not point to the ZIP file.
-
-## 3. Configure the model folder
-
-Set this in the same PowerShell window before starting NOVA:
-
-```powershell
-$env:NOVA_VOSK_MODEL_PATH = "C:\NOVA\models\vosk-model-small-en-us-0.15"
-nova-desktop
-```
-
-Alternatively, add this variable to your private `.env` file (do not commit `.env`):
+NOVA looks for that folder automatically in a development checkout. You can
+override it in your private `.env` file:
 
 ```dotenv
 NOVA_VOSK_MODEL_PATH=C:\NOVA\models\vosk-model-small-en-us-0.15
 ```
 
-The desktop process must be started after setting the variable.
-
-## 4. Use voice
-
-- Click **Talk** and speak a short phrase.
-- Vosk detects the end of the phrase and fills the message composer with the transcription.
-- NOVA sends the recognized text through the existing chat pipeline.
-- Click **Stop listening** to stop capture manually.
-- Click **Read last reply** to speak the most recent NOVA response through a locally installed Windows voice.
-
-The first voice model load can take a few seconds. Windows may show a microphone permission prompt; allow microphone access for the desktop app/terminal.
-
 ## Troubleshooting
 
-- **No Vosk model found:** check that `NOVA_VOSK_MODEL_PATH` points to the extracted model directory, not its parent or ZIP.
-- **Microphone unavailable:** check Windows Settings → Privacy & security → Microphone and ensure desktop apps can access it. Close other apps that may exclusively hold the microphone.
-- **No audio device / PortAudio error:** check Windows input device selection and restart NOVA after changing it.
+- **Model not found:** verify the model folder contains Vosk subfolders such as `am`, `conf`, and `graph`.
+- **Microphone unavailable:** check Windows Settings → Privacy & security → Microphone and allow desktop-app access.
+- **No audio device / PortAudio error:** check Windows input-device selection and restart NOVA.
 - **Speech output unavailable:** verify that Windows has an installed speech voice. pyttsx3 uses the local SAPI5 engine.
-- **Poor recognition:** try a larger Vosk model from the official model list; it will use more disk space and RAM.
+- **Poor recognition:** try a larger Vosk model from the official model list; it uses more disk space and RAM.
 
-Voice features are optional. NOVA's text chat works normally when these packages or the Vosk model are not installed.
+Voice features are optional. Text chat remains available without them.
