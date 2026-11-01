@@ -93,15 +93,14 @@ Memory capture uses a hybrid policy: explicit remember requests and recognized l
 
 ## Computer control and permission model
 
-The initial computer-control registry lives in `src/nova/core/computer/registry.py`; its API is in `src/nova/api/computer.py`, and the desktop approval surface is `src/nova/desktop_computer.py`.
+The Windows computer integration lives in `src/nova/core/computer/registry.py`; its API is in `src/nova/api/computer.py`, and the desktop approval surface is `src/nova/desktop_computer.py`.
 
-- Applications are selected from a fixed allowlist (Notepad, Calculator, Paint, File Explorer); no user/model-supplied executable path is accepted.
-- File operations are disabled unless `NOVA_COMPUTER_ALLOWED_ROOTS` contains one or more existing folders separated by semicolons.
-- Directory listing, filename search, and text-file reading resolve paths and verify they remain under an approved root. Symlink escapes are rejected.
-- Text reads are limited to a small extension allowlist and 64 KB; filename search is capped at 200 results.
-- The desktop asks for confirmation for each action and defaults the dialog to No. The API rejects requests without an explicit approval flag.
+- Application discovery combines current-user/all-users Start Menu shortcuts, the registered Windows Start Apps catalogue, classic uninstall registry entries, and App Paths. Executable launch is limited to paths discovered from those OS sources; packaged apps use their registered AppID.
+- When `NOVA_COMPUTER_ALLOWED_ROOTS` is empty, NOVA discovers ready local drive roots and scopes operations to locations the current Windows account can actually access. Setting the variable explicitly narrows the scope to the listed folders.
+- Directory listing, filename search, content search for supported text formats, text reading, and opening a path resolve targets and verify containment inside the discovered roots. Symlinks and junctions are not followed during recursive search.
+- Text reading/content search supports a bounded set of text/code formats up to 2 MB per file; results are capped at 500. PDF/Office document extraction and a persistent Windows Search-backed index remain future work.
+- The desktop asks for confirmation before opening or reading a selected item and defaults to No. Search is read-only. The API rejects mutating/open/read actions without an explicit approval flag.
 - Action metadata is stored in the existing local SQLite database in a `computer_audit` table. File contents are not logged.
-- A conservative deterministic parser recognizes only exact app-launch requests for the allowlisted applications and routes them through the desktop confirmation prompt. It does not ask the language model to decide or execute tools. Other requests remain normal chat.
-- Future intent planning may expand this parser, but it must preserve this approval boundary.
+- The desktop currently has deterministic request routing for direct app launches. A broader natural-language planner that can choose among discovery, search, open, read, and Windows settings tools is the next milestone; model output must never become executable authority.
 
 This is a local-user permission boundary, not a hardened multi-user security boundary. Keep the API bound to loopback; do not expose it to a network without adding authentication and a stronger authorization design.
