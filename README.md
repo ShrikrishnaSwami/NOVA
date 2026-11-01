@@ -152,7 +152,7 @@ pytest
 
 ## Safety direction
 
-NOVA will not give a language model unrestricted shell or computer access. Future tools will be explicitly registered, narrowly scoped, logged, and gated by user approval for sensitive actions. Model output is untrusted input, never executable authority.
+NOVA does not give a language model unrestricted shell or computer access. Computer tools are explicitly registered, narrowly scoped, logged, and gated by desktop approval. Model output is untrusted input, never executable authority.
 
 ## Roadmap
 
