@@ -12,10 +12,10 @@ from uuid import uuid4
 from typing import Any
 
 import httpx
-from nova.config import get_settings
+from nova.config import get_settings, user_data_dir
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
-from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient, QAction
 from PySide6.QtWidgets import (
     QApplication,
@@ -1244,6 +1244,10 @@ def main() -> None:
     app.setOrganizationName("NOVA")
     app.setFont(QFont("Segoe UI", 10))
     app.setQuitOnLastWindowClosed(False)
+    instance_lock = QLockFile(str(user_data_dir() / "nova.lock"))
+    if not instance_lock.tryLock(0):
+        QMessageBox.information(None, "NOVA is already running", "NOVA is already active in the Windows notification area.")
+        return
     window = NovaWindow()
     if "--background" not in sys.argv:
         window.show()
