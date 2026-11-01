@@ -7,6 +7,7 @@ import os
 import sys
 import subprocess
 import threading
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -19,6 +20,7 @@ from nova.core.tasks.intents import plan_task_intent
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from nova.desktop_command_centre import NovaCommandCentre
+from nova.core.voice import WakeWordSession
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient, QAction
 from PySide6.QtWidgets import (
@@ -186,24 +188,70 @@ class VoiceInputWorker(QThread):
 
 
 class SpeechOutputWorker(QThread):
-    """Speak text through the operating system's installed local TTS voices."""
+    """Interruptible local speech synthesis using the installed Windows voice."""
 
     failed = Signal(str)
+    finished_speaking = Signal()
 
     def __init__(self, text: str) -> None:
         super().__init__()
         self.text = text
+        self._stop_requested = threading.Event()
+
+    def stop(self) -> None:
+        self._stop_requested.set()
 
     def run(self) -> None:
+        engine = None
         try:
             import pyttsx3
 
             engine = pyttsx3.init()
             engine.say(self.text)
-            engine.runAndWait()
-            engine.stop()
+            engine.startLoop(False)
+            while not self._stop_requested.is_set() and engine.isBusy():
+                engine.iterate()
+                time.sleep(0.01)
+            if self._stop_requested.is_set():
+                engine.stop()
+            engine.endLoop()
         except Exception as exc:
             self.failed.emit(f"Speech output unavailable: {exc}")
+        finally:
+            self.finished_speaking.emit()
+
+
+class WakeWordWorker(QThread):
+    """Own the local microphone session on a worker thread."""
+
+    activated = Signal()
+    recognized = Signal(str)
+    failed = Signal(str)
+    listening = Signal()
+
+    def __init__(self, model_path: str) -> None:
+        super().__init__()
+        self.model_path = model_path
+        self._stop_requested = threading.Event()
+        self.session: WakeWordSession | None = None
+
+    def stop(self) -> None:
+        self._stop_requested.set()
+        if self.session is not None:
+            self.session.stop(timeout=2.0)
+
+    def run(self) -> None:
+        self.session = WakeWordSession(
+            self.model_path,
+            on_wake=self.activated.emit,
+            on_utterance=self.recognized.emit,
+            on_error=self.failed.emit,
+        )
+        self.session.start()
+        self.listening.emit()
+        while not self._stop_requested.is_set() and self.session.running:
+            self.msleep(100)
+        self.session.stop(timeout=2.0)
 
 
 class NovaOrb(QWidget):
@@ -442,6 +490,11 @@ class NovaWindow(QMainWindow):
         self.voice_button.setToolTip("Start local push-to-talk transcription")
         self.voice_button.clicked.connect(self._toggle_voice_input)
         composer_layout.addWidget(self.voice_button)
+        self.wake_button = QPushButton("◉  Wake word off")
+        self.wake_button.setObjectName("newChat")
+        self.wake_button.setToolTip("Enable or disable local 'Hey NOVA' microphone standby")
+        self.wake_button.clicked.connect(self._toggle_wake_word)
+        composer_layout.addWidget(self.wake_button)
         self.speak_button = QPushButton("🔊  Read last reply")
         self.speak_button.setObjectName("newChat")
         self.speak_button.setToolTip("Read NOVA's latest response using a local Windows voice")
@@ -1115,12 +1168,50 @@ class NovaWindow(QMainWindow):
         self.connection_label.setText(message)
         QMessageBox.warning(self, "Voice input", message)
 
+    def _toggle_wake_word(self) -> None:
+        if self.wake_thread and self.wake_thread.isRunning():
+            self.wake_thread.stop()
+            self.wake_button.setText("◉  Wake word off")
+            self.connection_label.setText("Stopping local wake-word listener…")
+            return
+        model_path = get_settings().vosk_model_path.strip()
+        if not model_path:
+            QMessageBox.information(
+                self, "Set up local voice",
+                "Set NOVA_VOSK_MODEL_PATH to your extracted Vosk model folder first.",
+            )
+            return
+        self.wake_thread = WakeWordWorker(model_path)
+        self.wake_thread.activated.connect(self._wake_word_activated)
+        self.wake_thread.recognized.connect(self._wake_word_recognized)
+        self.wake_thread.failed.connect(self._voice_failed)
+        self.wake_thread.listening.connect(
+            lambda: self.connection_label.setText("Wake-word standby active. Microphone is listening locally.")
+        )
+        self.wake_thread.finished.connect(lambda: self.wake_button.setText("◉  Wake word off"))
+        self.wake_button.setText("■  Wake word on")
+        self.wake_thread.start()
+
+    def _wake_word_activated(self) -> None:
+        self._stop_speech_output()
+        self.connection_label.setText("Wake phrase detected. Listening for your command…")
+
+    def _wake_word_recognized(self, phrase: str) -> None:
+        self.input.setText(phrase)
+        self.connection_label.setText("Command recognized locally. Sending to NOVA…")
+        self._send_message()
+
+    def _stop_speech_output(self) -> None:
+        if self.speech_worker and self.speech_worker.isRunning():
+            self.speech_worker.stop()
+
     def _speak_last_response(self) -> None:
         if not self.last_response_text.strip():
             QMessageBox.information(self, "Nothing to read", "NOVA has not produced a response yet.")
             return
         if self.speech_worker and self.speech_worker.isRunning():
-            QMessageBox.information(self, "Speech in progress", "NOVA is already speaking.")
+            self._stop_speech_output()
+            self.speak_button.setText("🔊  Read last reply")
             return
         self.speech_worker = SpeechOutputWorker(self.last_response_text)
         self.speech_worker.failed.connect(self.connection_label.setText)
@@ -1325,6 +1416,9 @@ class NovaWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         if self._quit_requested or not self._tray_available:
+            if self.wake_thread and self.wake_thread.isRunning():
+                self.wake_thread.stop()
+            self._stop_speech_output()
             self._stop_owned_backend()
             if self._hotkey_registered:
                 try:
