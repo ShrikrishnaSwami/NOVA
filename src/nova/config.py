@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -80,8 +81,8 @@ def get_vosk_model_path() -> str:
         return str(path)
 
     model_name = "vosk-model-small-en-us-0.15"
-    if getattr(__import__("sys"), "frozen", False):
-        base = Path(__import__("sys").executable).resolve().parent
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
     else:
         base = Path(__file__).resolve().parents[2]
     candidate = base / model_name
