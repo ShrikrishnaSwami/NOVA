@@ -27,6 +27,13 @@ def computer_capabilities() -> dict[str, Any]:
     return _registry().capabilities()
 
 
+@router.get("/automation/capabilities")
+def automation_capabilities() -> dict[str, Any]:
+    from nova.core.computer.automation import AutomationEngine
+    engine = AutomationEngine()
+    return {"max_steps": engine.max_steps, "actions": engine.capabilities}
+
+
 @router.post("/actions")
 def run_computer_action(request: ComputerActionRequest) -> dict[str, Any]:
     if not request.approved:
