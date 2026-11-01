@@ -479,6 +479,7 @@ class NovaWindow(QMainWindow):
     def _open_command_centre(self) -> None:
         """Open the full-screen telemetry and command overlay."""
         dialog = NovaCommandCentre(self)
+        dialog.showFullScreen()
         dialog.exec()
 
     def _add_message(self, role: str, content: str) -> QLabel:
