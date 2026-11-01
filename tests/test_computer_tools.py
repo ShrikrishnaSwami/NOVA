@@ -193,3 +193,41 @@ def test_registered_executable_launch_requires_discovery_and_uses_no_shell(tmp_p
 
     assert result["message"] == "Opened Notion."
     assert calls == [([str(executable.resolve())], {"shell": False, "close_fds": True})]
+
+
+def test_empty_folder_configuration_discovers_accessible_roots(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    monkeypatch.setattr(computer_registry, "_accessible_computer_roots", lambda: [tmp_path.resolve()])
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    assert registry.access_scope == "accessible_drives"
+    assert registry.allowed_roots == [tmp_path.resolve()]
+
+
+def test_search_file_contents_scans_accessible_roots(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    (tmp_path / "notes.txt").write_text("The NOVA project uses local intelligence.", encoding="utf-8")
+    monkeypatch.setattr(computer_registry, "_accessible_computer_roots", lambda: [tmp_path.resolve()])
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    result = registry.execute("search_file_contents", {"query": "local intelligence"})
+    assert len(result["matches"]) == 1
+    assert result["matches"][0]["path"].endswith("notes.txt")
+
+
+def test_open_path_requires_existing_path_within_accessible_root(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry, ComputerToolError
+
+    target = tmp_path / "notes.txt"
+    target.write_text("hello", encoding="utf-8")
+    monkeypatch.setattr(computer_registry, "_accessible_computer_roots", lambda: [tmp_path.resolve()])
+    monkeypatch.setattr(computer_registry.os, "name", "nt")
+    monkeypatch.setattr(computer_registry.os, "startfile", lambda path: None, raising=False)
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    result = registry.execute("open_path", {"path": str(target)})
+    assert result["path"] == str(target.resolve())
+    with pytest.raises(ComputerToolError):
+        registry.execute("open_path", {"path": str(tmp_path.parent / "outside.txt")})
