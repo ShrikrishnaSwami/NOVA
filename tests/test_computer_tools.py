@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -225,3 +226,35 @@ def test_open_path_requires_existing_path_within_accessible_root(tmp_path, monke
     assert result["path"] == str(target.resolve())
     with pytest.raises(ComputerToolError):
         registry.execute("open_path", {"path": str(tmp_path.parent / "outside.txt")})
+
+
+def test_read_document_uses_local_extractor(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    root = tmp_path / "documents"
+    root.mkdir()
+    document = root / "notes.pdf"
+    document.write_bytes(b"mock pdf bytes")
+    monkeypatch.setattr(computer_registry, "_extract_document_text", lambda path: "Physics assignment due Friday.")
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3", str(root))
+
+    result = registry.execute("read_text_file", {"path": str(document)})
+
+    assert result["content"] == "Physics assignment due Friday."
+
+
+def test_search_file_contents_includes_office_and_pdf_documents(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    root = tmp_path / "documents"
+    root.mkdir()
+    (root / "assignment.pdf").write_bytes(b"pdf")
+    (root / "budget.xlsx").write_bytes(b"xlsx")
+    monkeypatch.setattr(computer_registry, "_extract_document_text", lambda path: "coursework deadline")
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3", str(root))
+
+    result = registry.execute("search_file_contents", {"query": "deadline"})
+
+    assert {Path(item["path"]).name for item in result["matches"]} == {"assignment.pdf", "budget.xlsx"}
