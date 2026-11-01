@@ -293,3 +293,37 @@ class ComputerControlsDialog(QDialog):
             QMessageBox.warning(self, "Window control blocked", str(detail))
         except Exception as exc:
             QMessageBox.warning(self, "Window control unavailable", str(exc))
+
+
+    def execute_window_target(self, target: dict, action: str) -> dict | None:
+        """Ask for one confirmation, then perform one selected window action."""
+        labels = {"focus": "switch to", "minimize": "minimize", "restore": "restore", "maximize": "maximize"}
+        if action not in labels:
+            QMessageBox.warning(self, "Unsupported window action", "That window action is not supported.")
+            return None
+        title = str(target.get("title") or "selected window")
+        answer = QMessageBox.question(
+            self, "Approve window control?",
+            f"NOVA will {labels[action]} this window:\n\n{title}\n\nAllow this one action?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.status.setText("Window action cancelled.")
+            return None
+        try:
+            result = self.request(
+                "POST", "/computer/windows/actions",
+                json={"handle": target["handle"], "action": action, "approved": True},
+            )
+            self.status.setText(result.get("message", "Window action requested."))
+            return result
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = exc.response.json().get("detail", str(exc))
+            except ValueError:
+                detail = str(exc)
+            QMessageBox.warning(self, "Window control blocked", str(detail))
+        except Exception as exc:
+            QMessageBox.warning(self, "Window control unavailable", str(exc))
+        return None
