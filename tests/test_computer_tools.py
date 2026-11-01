@@ -88,3 +88,20 @@ def test_computer_tools_reject_unlisted_applications(tmp_path, monkeypatch) -> N
     )
     assert response.status_code == 422
     assert "allowlist" in response.json()["detail"].lower()
+
+
+def test_windows_settings_launch_uses_fixed_uri_without_shell(tmp_path, monkeypatch) -> None:
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    calls = []
+    monkeypatch.setattr(
+        "nova.core.computer.registry.subprocess.Popen",
+        lambda args, **kwargs: calls.append((args, kwargs)),
+    )
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    result = registry.execute("open_application", {"app": "windows settings"})
+
+    assert result["message"] == "Opened windows settings."
+    assert calls == [
+        (["explorer.exe", "ms-settings:"], {"shell": False, "close_fds": True})
+    ]
