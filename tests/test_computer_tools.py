@@ -258,3 +258,16 @@ def test_search_file_contents_includes_office_and_pdf_documents(tmp_path, monkey
     result = registry.execute("search_file_contents", {"query": "deadline"})
 
     assert {Path(item["path"]).name for item in result["matches"]} == {"assignment.pdf", "budget.xlsx"}
+
+
+def test_invalid_explicit_roots_do_not_expand_to_all_drives(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    fallback = tmp_path / "fallback"
+    fallback.mkdir()
+    monkeypatch.setattr(computer_registry, "_accessible_computer_roots", lambda: [fallback.resolve()])
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3", str(tmp_path / "missing-folder"))
+
+    assert registry.access_scope == "configured_folders"
+    assert registry.allowed_roots == []
