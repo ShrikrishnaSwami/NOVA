@@ -108,9 +108,38 @@ class ComputerToolRegistry:
                 (str(uuid4()), action, json.dumps(safe_parameters), outcome, summary[:500], _now()),
             )
 
+    def discover_applications(self) -> list[dict[str, str]]:
+        """Discover apps exposed as shortcuts in either Windows Start Menu."""
+        found: dict[str, dict[str, str]] = {}
+        for root in _start_menu_roots():
+            for current, directories, files in os.walk(root, followlinks=False):
+                current_path = Path(current)
+                directories[:] = [name for name in directories if not (current_path / name).is_symlink()]
+                for filename in files:
+                    shortcut = current_path / filename
+                    if shortcut.suffix.lower() != ".lnk" or shortcut.is_symlink():
+                        continue
+                    try:
+                        resolved = shortcut.resolve(strict=True)
+                        resolved.relative_to(root)
+                    except (OSError, RuntimeError, ValueError):
+                        continue
+                    name = shortcut.stem.strip()
+                    if name:
+                        found[str(resolved).casefold()] = {"name": name, "app_id": str(resolved)}
+                    if len(found) >= _MAX_APPLICATIONS:
+                        break
+                if len(found) >= _MAX_APPLICATIONS:
+                    break
+        apps = sorted(found.values(), key=lambda item: item["name"].casefold())
+        apps.append({"name": "Windows Settings", "app_id": _WINDOWS_SETTINGS_ID})
+        return apps
+
     def capabilities(self) -> dict[str, Any]:
+        applications = self.discover_applications()
         return {
-            "applications": list(_ALLOWED_APPS),
+            "applications": applications,
+            "application_count": len(applications),
             "file_roots": [str(root) for root in self.allowed_roots],
             "actions": ["open_application", "list_directory", "search_files", "read_text_file"],
             "file_access_enabled": bool(self.allowed_roots),
