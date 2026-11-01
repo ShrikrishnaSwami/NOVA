@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Optional local Vosk model directory for desktop push-to-talk input.
     vosk_model_path: str = ""
 
+    # Semicolon-separated folders that NOVA may list, search, and read after approval.
+    computer_allowed_roots: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="NOVA_",
