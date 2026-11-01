@@ -546,6 +546,7 @@ class NovaWindow(QMainWindow):
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText(reply)
+            dialog.close()
             return
 
         # If the catalogue did not identify the target, do not invent a launch.
