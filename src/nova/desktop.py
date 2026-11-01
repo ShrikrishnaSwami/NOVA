@@ -278,6 +278,11 @@ class NovaWindow(QMainWindow):
         self.last_response_text = ""
         self.voice_worker: VoiceInputWorker | None = None
         self.speech_worker: SpeechOutputWorker | None = None
+        self._skip_tool_planning = False
+        self._pending_tool_message = ""
+        self._pending_tool_calls: list[dict[str, Any]] = []
+        self.wake_session = None
+        self.wake_thread = None
         self._stream_flush_timer = QTimer(self)
         self._stream_flush_timer.setInterval(40)
         self._stream_flush_timer.timeout.connect(self._flush_stream_tokens)
@@ -918,16 +923,88 @@ class NovaWindow(QMainWindow):
             self.connection_label.setText(reply)
             return
 
-        # If the catalogue did not identify the target, do not invent a launch.
-        # Let NOVA explain the limitation or ask for clarification in normal chat.
-        self.input.clear()
-        self._add_message("YOU", message)
-        self.history.append({"role": "user", "content": message})
+        # Ask the configured model whether registered tools are needed.
+        # The proposal is validated server-side and is never executed without approval.
+        if not self._skip_tool_planning:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            self._pending_tool_message = message
+            self.send_button.setEnabled(False)
+            self.send_button.setText("Planning…")
+            self.connection_label.setText("NOVA is considering its registered capabilities…")
+            self.worker = ApiWorker("/runtime/tools/plan", {"message": message})
+            self.worker.completed.connect(self._tool_plan_completed)
+            self.worker.failed.connect(self._tool_plan_failed)
+            self.worker.finished.connect(self._tool_plan_finished)
+            self.worker.start()
+            return
+
+        self._skip_tool_planning = False
+        self._start_chat_request(message)
+
+    def _tool_plan_failed(self, message: str) -> None:
+        self.connection_label.setText("Tool planning unavailable; continuing with ordinary chat.")
+        self._start_chat_request(self._pending_tool_message)
+
+    def _tool_plan_finished(self) -> None:
+        self.send_button.setEnabled(True)
+        self.send_button.setText("Send  ↗")
+
+    def _tool_plan_completed(self, data: dict) -> None:
+        proposal = data.get("proposal") or {}
+        calls = proposal.get("tool_calls") or []
+        if not calls:
+            self._start_chat_request(self._pending_tool_message)
+            return
+        self._pending_tool_calls = calls
+        descriptions = "\\n".join(
+            f"{index}. {call.get('name')} — {json.dumps(call.get('arguments', {}), ensure_ascii=False)}"
+            for index, call in enumerate(calls, 1)
+        )
+        reason = str(proposal.get("reason", "")).strip()
+        prompt = "NOVA proposes the following registered tool actions:\\n\\n" + descriptions
+        if reason:
+            prompt += "\\n\\nReason: " + reason
+        prompt += "\\n\\nThese actions will only run if you approve."
+        answer = QMessageBox.question(
+            self, "Approve NOVA tool actions", prompt,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self._add_message("NOVA", "Understood. I haven't executed those actions.")
+            self.history.append({"role": "assistant", "content": "Understood. I haven't executed those actions."})
+            self.connection_label.setText("Tool actions declined.")
+            return
+        self.send_button.setEnabled(False)
+        self.send_button.setText("Executing…")
+        self.connection_label.setText("Executing approved registered actions…")
+        self.worker = ApiWorker("/runtime/tools/execute", {"calls": calls, "approved": True})
+        self.worker.completed.connect(self._tool_execute_completed)
+        self.worker.failed.connect(self._request_failed)
+        self.worker.finished.connect(self._request_finished)
+        self.worker.start()
+
+    def _tool_execute_completed(self, data: dict) -> None:
+        results = data.get("results", [])
+        result_text = json.dumps(results, ensure_ascii=False, indent=2)
+        self._start_chat_request(
+            "The user approved the proposed registered tools. Here are their actual results:\\n"
+            + result_text
+            + "\\nRespond to the user's original request using these results. Clearly distinguish simulation results from real system actions."
+        )
+
+    def _start_chat_request(self, message: str) -> None:
         self.send_button.setEnabled(False)
         self.send_button.setText("Thinking…")
         self.connection_label.setText("NOVA is generating…")
         self.streaming_body = self._add_message("NOVA", "")
-        self.worker = ApiWorker("/chat/stream", {"message": message, "history": self.history[:-1][-20:], "conversation_id": self.conversation_id}, streaming=True)
+        self.worker = ApiWorker(
+            "/chat/stream",
+            {"message": message, "history": self.history[-20:], "conversation_id": self.conversation_id},
+            streaming=True,
+        )
         self.worker.token.connect(self._append_stream_token)
         self.worker.completed.connect(self._chat_completed)
         self.worker.failed.connect(self._request_failed)
