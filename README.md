@@ -176,3 +176,16 @@ The default local-chat settings are tuned for responsiveness:
 - `NOVA_AI_TOP_P=0.8` uses Qwen3's recommended non-thinking sampling value.
 
 These settings are configurable in your private `.env`. Model residency is controlled by the local runtime, not NOVA's generic OpenAI-compatible adapter. If Bionic offers a keep-loaded or auto-unload setting, keep the model loaded while using NOVA. Actual token generation speed is still limited by the model, quantization, and available CPU/GPU acceleration.
+
+
+### Natural-language computer requests
+
+NOVA's first deterministic computer planner can route requests such as:
+
+- "Find my physics assignment" — search filenames across accessible drives.
+- "Search inside my files for thermodynamics" — search supported local text and document contents.
+- "Open C:\\Users\\you\\Documents\\notes.txt" — ask before opening an explicit path.
+- "Read C:\\Users\\you\\Documents\\notes.txt" — ask before reading; content is displayed locally and is not sent to the model.
+- "List files in C:\\Users\\you\\Documents" — ask before listing a folder.
+
+Every planned action is reviewed through a one-action confirmation dialog. The planner is intentionally deterministic at this stage: it does not execute model-generated commands, and it does not yet perform multi-step autonomous workflows.
