@@ -17,8 +17,12 @@ The planner never executes a tool. The runtime API exposes:
 A chain is limited to five calls. The registry validates the entire chain before
 running the first handler. Unknown tool names, extra arguments, missing required
 arguments, invalid enum values, and incompatible primitive types are rejected.
-The current default registry contains simulated subsystems only; it does not
-control aerospace, grid, thermal, or projection hardware.
+The default registry now includes real read-only tools for system overview,
+visible process inventory, foreground-window details, and visible windows, as
+well as simulated aerospace, smart-grid, thermal, and holographic subsystems.
+The simulations do not control physical hardware. The current model registry
+does not yet expose mutating Windows actions; those remain on the existing
+permission-scoped Computer Controls path.
 
 The planning endpoint is an API foundation. The desktop chat interface does not
 yet automatically present the proposal/approval flow, and model-generated plans
