@@ -7,6 +7,9 @@ from nova.core.tasks.intents import plan_task_intent
 def test_open_and_list_task_intents():
     assert plan_task_intent("open scheduled tasks") == {"kind": "open"}
     assert plan_task_intent("what tasks do I have") == {"kind": "list"}
+    assert plan_task_intent("open computer controls") == {"kind": "open_computer"}
+    assert plan_task_intent("open memory manager") == {"kind": "open_memory"}
+    assert plan_task_intent("open conversation history") == {"kind": "open_history"}
 
 
 def test_parse_storage_report_tomorrow_at_ten_am():
