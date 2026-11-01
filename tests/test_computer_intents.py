@@ -6,6 +6,11 @@ def test_match_open_calculator_command() -> None:
     assert match_open_application_command("please launch the calc please") == "calculator"
 
 
+def test_match_windows_settings_command() -> None:
+    assert match_open_application_command("Open Settings") == "windows settings"
+    assert match_open_application_command("Open Windows Settings") == "windows settings"
+
+
 def test_match_other_allowlisted_apps() -> None:
     assert match_open_application_command("Start Notepad.") == "notepad"
     assert match_open_application_command("open file explorer") == "file explorer"
