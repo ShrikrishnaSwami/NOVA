@@ -1,9 +1,12 @@
 """Windows shell integration helpers for NOVA."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
+
+from nova.config import user_data_dir
 
 
 class ShellIntegrationError(RuntimeError):
@@ -59,3 +62,33 @@ def show_windows_toast(title: str, message: str) -> bool:
         raise ShellIntegrationError("Install NOVA's Windows extra to enable native notifications: pip install -e '.[windows]'") from exc
     except Exception as exc:
         raise ShellIntegrationError(f"Windows notification could not be displayed: {exc}") from exc
+
+
+def notifications_enabled() -> bool:
+    """Return the user's explicit NOVA toast-notification preference."""
+    path = user_data_dir() / "preferences.json"
+    try:
+        preferences = json.loads(path.read_text(encoding="utf-8"))
+        return preferences.get("notifications_enabled") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def set_notifications_enabled(enabled: bool) -> bool:
+    """Persist the user's local opt-in for NOVA-generated toast notifications."""
+    directory = user_data_dir()
+    path = directory / "preferences.json"
+    temporary = directory / "preferences.json.tmp"
+    try:
+        try:
+            preferences = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(preferences, dict):
+                preferences = {}
+        except (OSError, ValueError):
+            preferences = {}
+        preferences["notifications_enabled"] = bool(enabled)
+        temporary.write_text(json.dumps(preferences, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    except OSError as exc:
+        raise ShellIntegrationError(f"Could not save NOVA notification preferences: {exc}") from exc
+    return notifications_enabled()
