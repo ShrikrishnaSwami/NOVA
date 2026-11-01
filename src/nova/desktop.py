@@ -1023,7 +1023,7 @@ class NovaWindow(QMainWindow):
             for index, call in enumerate(calls, 1)
         )
         reason = str(proposal.get("reason", "")).strip()
-        prompt = "NOVA proposes the following registered tool actions:\\n\\n" + descriptions
+        prompt = "NOVA proposes the following registered tool actions:\n\\n" + descriptions
         if reason:
             prompt += "\n\nReason: " + reason
         prompt += "\n\nThese actions will only run if you approve."
@@ -1204,7 +1204,7 @@ class NovaWindow(QMainWindow):
             self.wake_button.setText("◉  Wake word off")
             self.connection_label.setText("Stopping local wake-word listener…")
             return
-        model_path = get_settings().vosk_model_path.strip()
+        model_path = get_vosk_model_path()
         if not model_path:
             QMessageBox.information(
                 self, "Set up local voice",
