@@ -205,3 +205,40 @@ def plan_window_intent(message: str) -> dict[str, str] | None:
         return None
     action = "focus" if verb.group(1).casefold() in {"switch to", "focus on", "bring up"} else verb.group(1).casefold()
     return {"target": target, "action": action}
+
+
+
+def plan_system_intent(message: str) -> dict[str, object] | None:
+    """Recognize a few bounded Windows system actions; execution still needs approval."""
+    text = message.strip()
+    match = re.fullmatch(
+        r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?(?:set|change)\s+(?:the\s+)?"
+        r"(volume|brightness)\s+(?:to\s+)?(\d{1,3})\s*%?[.!?]*",
+        text, re.IGNORECASE,
+    )
+    if match:
+        control = match.group(1).casefold()
+        percent = int(match.group(2))
+        if percent > 100:
+            return None
+        return {
+            "kind": control,
+            "endpoint": f"/computer/system/{control}",
+            "payload": {"percent": percent, "approved": True},
+            "description": f"set Windows {control} to {percent} percent",
+        }
+    match = re.fullmatch(
+        r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?"
+        r"(?:search\s+windows\s+for|use\s+windows\s+search\s+for)\s+(.+?)[.!?]*",
+        text, re.IGNORECASE,
+    )
+    if match:
+        query = match.group(1).strip().strip('"')
+        if query and len(query) <= 200:
+            return {
+                "kind": "search",
+                "endpoint": "/computer/windows/search",
+                "payload": {"query": query, "approved": True},
+                "description": f"open Windows Search for '{query}'",
+            }
+    return None
