@@ -6,7 +6,10 @@ from pathlib import Path
 from nova.config import Settings, environment_file, user_memory_path
 
 
-def test_settings_reads_selected_env_file(tmp_path: Path) -> None:
+def test_settings_reads_selected_env_file(tmp_path: Path, monkeypatch) -> None:
+    # Real process environment variables intentionally outrank dotenv values.
+    monkeypatch.delenv("NOVA_AI_MODEL", raising=False)
+    monkeypatch.delenv("NOVA_PORT", raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text("NOVA_AI_MODEL=profile-qwen\nNOVA_PORT=8123\n", encoding="utf-8")
     settings = Settings(_env_file=env_file)
