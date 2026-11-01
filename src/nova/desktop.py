@@ -13,6 +13,11 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
+    QInputDialog,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -177,6 +182,11 @@ class NovaWindow(QMainWindow):
         new_chat.setObjectName("newChat")
         new_chat.clicked.connect(self._new_chat)
         side.addWidget(new_chat)
+
+        memory_button = QPushButton("◈   Manage memories")
+        memory_button.setObjectName("newChat")
+        memory_button.clicked.connect(self._open_memory_manager)
+        side.addWidget(memory_button)
 
         nav_label = QLabel("WORKSPACE")
         nav_label.setObjectName("eyebrow")
@@ -398,6 +408,99 @@ class NovaWindow(QMainWindow):
         self.backend_label.setText("●  BACKEND OFFLINE")
         self.model_badge.setText("MODEL  •  DISCONNECTED")
         self.connection_label.setText(message)
+
+
+    def _open_memory_manager(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("NOVA Memory")
+        dialog.resize(620, 440)
+        layout = QVBoxLayout(dialog)
+        description = QLabel("Memories stay on this device. Pending items are not used in responses until approved.")
+        description.setWordWrap(True)
+        description.setObjectName("muted")
+        layout.addWidget(description)
+        items = QListWidget()
+        layout.addWidget(items, 1)
+
+        def refresh() -> None:
+            items.clear()
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/memory")
+                response.raise_for_status()
+                memories = response.json().get("memories", [])
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Memory unavailable", str(exc))
+                return
+            for memory in memories:
+                prefix = "PENDING · " if memory.get("status") == "pending" else ""
+                item = QListWidgetItem(prefix + memory.get("content", ""))
+                item.setData(Qt.ItemDataRole.UserRole, memory)
+                items.addItem(item)
+
+        actions = QHBoxLayout()
+        approve_button = QPushButton("Approve")
+        edit_button = QPushButton("Edit")
+        delete_button = QPushButton("Delete")
+        close_button = QPushButton("Close")
+        actions.addWidget(approve_button)
+        actions.addWidget(edit_button)
+        actions.addWidget(delete_button)
+        actions.addStretch()
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+
+        def selected_memory() -> dict | None:
+            item = items.currentItem()
+            return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+        def approve() -> None:
+            memory = selected_memory()
+            if not memory:
+                return
+            if memory.get("status") != "pending":
+                QMessageBox.information(dialog, "Already approved", "This memory is already active.")
+                return
+            try:
+                response = _HTTP_CLIENT.post(f"{API_ROOT}/memory/{memory['id']}/approve")
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not approve memory", str(exc))
+
+        def edit() -> None:
+            memory = selected_memory()
+            if not memory:
+                return
+            value, accepted = QInputDialog.getMultiLineText(dialog, "Edit memory", "Memory content:", memory.get("content", ""))
+            if not accepted or not value.strip():
+                return
+            try:
+                response = _HTTP_CLIENT.patch(f"{API_ROOT}/memory/{memory['id']}", json={"content": value.strip()})
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not edit memory", str(exc))
+
+        def delete() -> None:
+            memory = selected_memory()
+            if not memory:
+                return
+            answer = QMessageBox.question(dialog, "Delete memory", "Permanently delete this saved memory?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                response = _HTTP_CLIENT.delete(f"{API_ROOT}/memory/{memory['id']}")
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not delete memory", str(exc))
+
+        approve_button.clicked.connect(approve)
+        edit_button.clicked.connect(edit)
+        delete_button.clicked.connect(delete)
+        close_button.clicked.connect(dialog.accept)
+        refresh()
+        dialog.exec()
 
     def _new_chat(self) -> None:
         self.history.clear()
