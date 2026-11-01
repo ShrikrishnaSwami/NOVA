@@ -18,6 +18,7 @@ from nova.core.computer.automation import AutomationEngine, AutomationPlanError,
 from nova.core.tasks.intents import plan_task_intent
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
+from nova.desktop_command_centre import NovaCommandCentre
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient, QAction
 from PySide6.QtWidgets import (
@@ -336,6 +337,11 @@ class NovaWindow(QMainWindow):
         tasks_button.clicked.connect(self._open_task_manager)
         side.addWidget(tasks_button)
 
+        command_centre_button = QPushButton("◎   Command centre")
+        command_centre_button.setObjectName("newChat")
+        command_centre_button.clicked.connect(self._open_command_centre)
+        side.addWidget(command_centre_button)
+
         nav_label = QLabel("WORKSPACE")
         nav_label.setObjectName("eyebrow")
         side.addSpacing(22)
@@ -469,6 +475,11 @@ class NovaWindow(QMainWindow):
             QPushButton#sendButton:hover { background: #2195d4; }
             QPushButton:disabled { background: #26384c; color: #7b8ca1; }
         """)
+
+    def _open_command_centre(self) -> None:
+        """Open the full-screen telemetry and command overlay."""
+        dialog = NovaCommandCentre(self)
+        dialog.exec()
 
     def _add_message(self, role: str, content: str) -> QLabel:
         card = QFrame()
