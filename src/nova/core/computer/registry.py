@@ -275,9 +275,10 @@ class ComputerToolRegistry:
     def __init__(self, database_path: str | Path, allowed_roots: str = "") -> None:
         self.database_path = Path(database_path).expanduser()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        has_explicit_scope = bool(allowed_roots.strip())
         configured_roots = self._parse_roots(allowed_roots)
-        self.access_scope = "configured_folders" if configured_roots else "accessible_drives"
-        self.allowed_roots = configured_roots or _accessible_computer_roots()
+        self.access_scope = "configured_folders" if has_explicit_scope else "accessible_drives"
+        self.allowed_roots = configured_roots if has_explicit_scope else _accessible_computer_roots()
         self._initialize_audit()
 
     @staticmethod
