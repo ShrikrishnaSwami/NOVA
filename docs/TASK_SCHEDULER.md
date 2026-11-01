@@ -7,7 +7,7 @@ NOVA's task scheduler stores jobs and run history in the same local SQLite datab
 - `system.snapshot`: collect CPU, memory, and platform status.
 - `storage.report`: collect disk capacity and free-space information.
 
-These first actions are read-only. A task is created in `pending_approval` and does not run until the user approves it. Approved jobs can run once, daily, or weekly. Jobs can be paused or cancelled, and each execution is recorded in local history. A failed execution is marked failed rather than silently retried.
+These first actions are read-only. A task is created in `pending_approval` and does not run until the user approves it. Approved jobs can run once, daily, or weekly. Jobs can be paused or cancelled, and each execution is recorded in local history. A failed execution is marked failed rather than silently retried. If Windows notifications are enabled, NOVA reports completed or failed scheduled jobs and significant system-monitor alerts using native Windows notifications.
 
 ## API
 

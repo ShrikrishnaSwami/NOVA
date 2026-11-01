@@ -349,6 +349,7 @@ class NovaWindow(QMainWindow):
         self._setup_windows_shell()
         self._ensure_backend_process()
         QTimer.singleShot(1500, self._check_status)
+        QTimer.singleShot(2600, self._restore_last_conversation)
 
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._check_status)
@@ -1858,6 +1859,34 @@ class NovaWindow(QMainWindow):
         close_button.clicked.connect(dialog.accept)
         refresh()
         dialog.exec()
+
+    def _restore_last_conversation(self, retries: int = 4) -> None:
+        """Resume the latest saved conversation after the local backend is ready."""
+        if self.history or self.input.text().strip():
+            return
+        try:
+            response = _HTTP_CLIENT.get(f"{API_ROOT}/conversations?limit=1", timeout=3.0)
+            response.raise_for_status()
+            conversations = response.json().get("conversations", [])
+            if not conversations:
+                return
+            conversation = conversations[0]
+            loaded = _HTTP_CLIENT.get(f"{API_ROOT}/conversations/{conversation['id']}", timeout=5.0)
+            loaded.raise_for_status()
+            messages = loaded.json().get("messages", [])
+            if not messages or self.history or self.input.text().strip():
+                return
+            self.conversation_id = conversation["id"]
+            self.history.clear()
+            for message in messages:
+                role = message.get("role", "assistant")
+                content = message.get("content", "")
+                self.history.append({"role": role, "content": content})
+                self._add_message("YOU" if role == "user" else "NOVA", content)
+            self.connection_label.setText("Resumed your latest conversation from local memory.")
+        except Exception:
+            if retries > 0:
+                QTimer.singleShot(1800, lambda: self._restore_last_conversation(retries - 1))
 
     def _new_chat(self) -> None:
         self.history.clear()

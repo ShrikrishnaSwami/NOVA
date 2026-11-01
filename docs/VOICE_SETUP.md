@@ -16,11 +16,12 @@ model automatically. You do not need to edit source code, run a download
 command, or set `NOVA_VOSK_MODEL_PATH` for the packaged app.
 
 During installation, NOVA can be configured to start with Windows in the
-notification area. Enable **Wake word** in the desktop composer once. That
-preference is saved locally, so on subsequent sign-ins NOVA starts hidden,
-loads its bundled model, and listens for "Hey NOVA". The wake-word preference
-is off by default and can be switched off immediately from the same button.
-The tray icon and composer indicate whether the microphone listener is active.
+notification area. Enable **Wake word** in the desktop composer or open **NOVA settings** and
+turn on **Hey NOVA**. The settings screen lets you choose an input device and
+run a microphone test. The preference is saved locally, so on subsequent
+sign-ins NOVA starts hidden, loads its bundled model, and listens for "Hey
+NOVA". Wake-word standby is off by default and can be disabled from the
+composer or settings. Microphone audio remains on-device and is never uploaded.
 
 When activated, NOVA stops any current speech playback, captures your command,
 and sends it through the normal chat and approved-tool pipeline. When a reply
