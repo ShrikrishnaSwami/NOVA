@@ -271,3 +271,25 @@ def test_invalid_explicit_roots_do_not_expand_to_all_drives(tmp_path, monkeypatc
 
     assert registry.access_scope == "configured_folders"
     assert registry.allowed_roots == []
+
+
+def test_search_files_scans_all_accessible_roots_when_root_is_omitted(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    first = tmp_path / "drive_one"
+    second = tmp_path / "drive_two"
+    first.mkdir()
+    second.mkdir()
+    (first / "resume_old.pdf").write_bytes(b"")
+    (second / "resume_final.pdf").write_bytes(b"")
+    monkeypatch.setattr(
+        computer_registry,
+        "_accessible_computer_roots",
+        lambda: [first.resolve(), second.resolve()],
+    )
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    result = registry.execute("search_files", {"query": "resume"})
+
+    assert {Path(item).name for item in result["matches"]} == {"resume_old.pdf", "resume_final.pdf"}
+    assert result["root"] == "all accessible locations"
