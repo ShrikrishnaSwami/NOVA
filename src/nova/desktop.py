@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import application_candidates, plan_computer_intent, requested_application_name
+from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -512,6 +512,41 @@ class NovaWindow(QMainWindow):
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText(reply)
             dialog.close()
+            return
+
+        os_query = plan_os_query(message)
+        if os_query:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            try:
+                response = httpx.get(f"{API_ROOT}{os_query['endpoint']}", timeout=15.0)
+                response.raise_for_status()
+                payload = response.json()
+                if os_query["kind"] == "processes":
+                    processes = payload.get("processes", [])
+                    lines = [f"{item['name']} (PID {item['pid']}, {item['status']})" for item in processes[:30]]
+                    reply = f"I can see {len(processes)} running processes.\n" + ("\n".join(lines) if lines else "No process records were returned.")
+                    if len(processes) > 30:
+                        reply += f"\nAnd {len(processes) - 30} more."
+                elif os_query["kind"] == "windows":
+                    foreground = payload.get("foreground")
+                    windows = payload.get("windows", [])
+                    lines = [f"{item['title']} (PID {item['pid']})" for item in windows[:30]]
+                    reply = ("Foreground window: " + foreground["title"] + "\n" if foreground and foreground.get("title") else "")
+                    reply += "Visible windows:\n" + ("\n".join(lines) if lines else "No visible titled windows were found.")
+                else:
+                    reply = (
+                        f"{payload.get('platform')}\n"
+                        f"Processor: {payload.get('processor') or 'Not reported'}\n"
+                        f"Logical CPUs: {payload.get('cpu_count_logical', 'Not available')}\n"
+                        f"Memory: {round(payload.get('memory_total_bytes', 0) / (1024**3), 1) if payload.get('memory_total_bytes') else 'Not available'} GB"
+                    )
+            except Exception as exc:
+                reply = f"I couldn't read that Windows information: {exc}"
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText("Read-only Windows information retrieved.")
             return
 
         # Route recognized local discovery/file requests through the same approval surface.
