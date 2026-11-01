@@ -150,3 +150,46 @@ def test_launch_only_accepts_currently_discovered_shortcuts(tmp_path, monkeypatc
 
     with pytest.raises(computer_registry.ComputerToolError):
         registry.execute("open_application", {"app_id": str(root / "not-discovered.exe")})
+
+
+
+def test_discover_apps_includes_classic_registry_installations(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    monkeypatch.setattr(computer_registry, "_start_menu_roots", lambda: [])
+    monkeypatch.setattr(computer_registry, "_registered_start_apps", lambda: [])
+    monkeypatch.setattr(
+        computer_registry,
+        "_installed_registry_apps",
+        lambda: [{"name": "Notion", "app_id": "exe:C:\\Program Files\\Notion\\Notion.exe"}],
+    )
+
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    apps = registry.discover_applications()
+
+    assert {"name": "Notion", "app_id": "exe:C:\\Program Files\\Notion\\Notion.exe"} in apps
+
+
+def test_registered_executable_launch_requires_discovery_and_uses_no_shell(tmp_path, monkeypatch) -> None:
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    executable = tmp_path / "Notion.exe"
+    executable.write_bytes(b"test executable")
+    app_id = "exe:" + str(executable.resolve())
+    calls = []
+    monkeypatch.setattr(
+        "nova.core.computer.registry.subprocess.Popen",
+        lambda args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    monkeypatch.setattr(
+        registry,
+        "discover_applications",
+        lambda: [{"name": "Notion", "app_id": app_id}],
+    )
+    result = registry.execute("open_application", {"app_id": app_id})
+
+    assert result["message"] == "Opened Notion."
+    assert calls == [([str(executable.resolve())], {"shell": False, "close_fds": True})]
