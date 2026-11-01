@@ -4,7 +4,7 @@ Set-Location (Join-Path $PSScriptRoot "..")
 python -m pip install --upgrade pip
 python -m pip install -e ".[desktop,voice,windows,documents,build]"
 
-$args = @(
+$pyinstallerArgs = @(
   "--noconfirm", "--clean", "--onedir", "--windowed",
   "--name", "NOVA", "--paths", "src",
   "--collect-all", "PySide6",
@@ -19,7 +19,7 @@ $args = @(
   "--hidden-import", "uvicorn.lifespan.on",
   "scripts/nova_entry.py"
 )
-python -m PyInstaller @args
+python -m PyInstaller @pyinstallerArgs
 
 if (-not (Test-Path "dist/NOVA/NOVA.exe")) {
   throw "PyInstaller did not produce dist/NOVA/NOVA.exe"
