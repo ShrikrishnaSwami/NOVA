@@ -725,7 +725,7 @@ class NovaWindow(QMainWindow):
 
     def _send_message(self) -> None:
         message = self.input.text().strip()
-        if not message or (self.worker and self.worker.isRunning()):
+        if not message or (self.worker and self.worker.isRunning()) or (self.tool_worker and self.tool_worker.isRunning()):
             return
 
         if self._handle_task_intent(message):
@@ -1018,15 +1018,15 @@ class NovaWindow(QMainWindow):
             self._start_chat_request(self._pending_tool_message)
             return
         self._pending_tool_calls = calls
-        descriptions = "\\n".join(
+        descriptions = "\n".join(
             f"{index}. {call.get('name')} — {json.dumps(call.get('arguments', {}), ensure_ascii=False)}"
             for index, call in enumerate(calls, 1)
         )
         reason = str(proposal.get("reason", "")).strip()
         prompt = "NOVA proposes the following registered tool actions:\\n\\n" + descriptions
         if reason:
-            prompt += "\\n\\nReason: " + reason
-        prompt += "\\n\\nThese actions will only run if you approve."
+            prompt += "\n\nReason: " + reason
+        prompt += "\n\nThese actions will only run if you approve."
         answer = QMessageBox.question(
             self, "Approve NOVA tool actions", prompt,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -1056,9 +1056,9 @@ class NovaWindow(QMainWindow):
         results = data.get("results", [])
         result_text = json.dumps(results, ensure_ascii=False, indent=2)
         self._start_chat_request(
-            "The user approved the proposed registered tools. Here are their actual results:\\n"
+            "The user approved the proposed registered tools. Here are their actual results:\n"
             + result_text
-            + "\\nRespond to the user's original request using these results. Clearly distinguish simulation results from real system actions.",
+            + "\nRespond to the user's original request using these results. Clearly distinguish simulation results from real system actions.",
             include_latest_user=True,
         )
 
@@ -1182,7 +1182,7 @@ class NovaWindow(QMainWindow):
     def _start_wake_word(self) -> None:
         if self.wake_thread and self.wake_thread.isRunning():
             return
-        model_path = get_settings().vosk_model_path.strip()
+        model_path = get_vosk_model_path()
         if not model_path:
             self.connection_label.setText("Wake word is enabled, but NOVA_VOSK_MODEL_PATH is not configured.")
             return
