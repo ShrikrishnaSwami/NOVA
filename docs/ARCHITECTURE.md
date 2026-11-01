@@ -133,7 +133,7 @@ The optional windows dependency group installs pycaw for master audio control. C
 
 ## Application UI Automation boundary
 
-The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attaches to an existing visible top-level window by its enumerated HWND. It exposes only enabled, visible Button, TabItem, MenuItem, Hyperlink, CheckBox, and RadioButton controls with accessible names. Activation requires an exact name and control type that resolve to exactly one current control, plus explicit desktop/API approval. It does not send arbitrary text, read edit controls, execute scripts, or operate on unlisted windows. UI Automation availability depends on the target application's accessibility tree; some apps expose incomplete controls.
+The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attaches to an existing visible top-level window by its enumerated HWND. It exposes only enabled, visible Button, TabItem, MenuItem, Hyperlink, CheckBox, and RadioButton controls with accessible names. Activation requires an exact name and control type that resolve to exactly one current control, plus explicit desktop/API approval. It does not send arbitrary keystrokes, read password fields, execute scripts, or operate on unlisted windows. A separate approved operation can enter up to 2,000 characters into one uniquely named visible, enabled, non-password Edit control. UI Automation availability depends on the target application's accessibility tree; some apps expose incomplete controls.
 
 
 ## Windows shell integration and event-driven workflows
@@ -149,4 +149,19 @@ UI Automation supports exact-name activation of a small set of visible controls 
 
 ## Desktop-managed backend lifecycle
 
-When the desktop starts, it probes the configured local API health endpoint. If no healthy API is present and NOVA_API_URL matches the configured loopback host/port, the desktop starts `python -m uvicorn nova.main:app` as a child process with no console window. It never auto-starts a backend on a non-loopback bind address or silently redirects a custom NOVA_API_URL. On explicit Quit, it terminates only the child process it owns; it does not stop a backend that was already running. The API remains a separate local process boundary, preserving the existing FastAPI architecture.
+When the desktop starts, it probes the configured local API health endpoint. If no healthy API is present and NOVA_API_URL matches the configured loopback host/port, the desktop starts `python -m nova.service` as a child process with no console window (or starts the packaged executable in `--nova-backend` mode). It never auto-starts a backend on a non-loopback bind address or silently redirects a custom NOVA_API_URL. The desktop passes its PID and process creation time to the child; a watchdog makes the API exit if the owning desktop process disappears, preventing orphaned backends after a crash. On explicit Quit, the desktop terminates only the child process it owns; it does not stop a backend that was already running.
+
+
+## Per-user installation and configuration
+
+The Windows distribution uses PyInstaller onedir plus an Inno Setup per-user installer. It installs without elevation under %LOCALAPPDATA%\Programs\NOVA. The current-user settings file is %APPDATA%\NOVA\.env and persistent SQLite memory is %LOCALAPPDATA%\NOVA\nova_memory.sqlite3. The installer copies the example config only if no user config exists, so upgrades preserve user preferences and memory. A QLockFile in the user profile prevents multiple desktop instances.
+
+The desktop runs in the signed-in interactive session rather than as a LocalSystem service. This is required for correct access to foreground windows, UI Automation and the user's notification experience. It can start hidden at sign-in, minimize to the tray, and be reopened with Ctrl+Alt+Space. The user can explicitly quit it from the tray; this stops the owned API child. Startup registration writes only the current user's Run key.
+
+## Shared automation engine
+
+The AutomationEngine maintains a finite registry of typed action contracts and exposes it at GET /computer/automation/capabilities. The desktop validates complete multi-step plans against that registry before displaying individual confirmations. Plans are limited to five steps, reject unknown actions and malformed payloads, and stop after the first cancelled or failed step. API endpoints independently validate approval flags and operation-specific parameters.
+
+## Windows notification capability boundary
+
+NOVA can display its own toast notifications through the current user's Windows notification system. It does not read other applications' notifications. The Windows UserNotificationListener API requires an MSIX package identity, the restricted userNotificationListener capability, and explicit user consent. The current Inno Setup installer does not declare that capability. A future MSIX distribution and permission flow is required before cross-app notification reading can be implemented honestly and tested.
