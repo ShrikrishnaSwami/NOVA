@@ -141,3 +141,34 @@ def launch_windows_search(request: WindowsSearchRequest) -> dict[str, Any]:
     except WindowsControlError as exc:
         _registry()._audit("windows_search", {"query": request.query}, "blocked", str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+
+@router.get("/windows/{handle}/controls")
+def inspect_window_controls(handle: int, limit: int = Query(default=100, ge=1, le=200)) -> dict[str, Any]:
+    from nova.core.computer.ui_automation import UIAutomationError, list_interactive_controls
+    try:
+        return {"controls": list_interactive_controls(handle, limit)}
+    except UIAutomationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class UIControlActionRequest(BaseModel):
+    handle: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    control_type: Literal["Button", "TabItem", "MenuItem", "Hyperlink", "CheckBox", "RadioButton"]
+    approved: bool = False
+
+
+@router.post("/windows/controls/actions")
+def activate_window_control(request: UIControlActionRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Activating an application control requires explicit approval.")
+    from nova.core.computer.ui_automation import UIAutomationError, click_named_control
+    try:
+        result = click_named_control(request.handle, request.name, request.control_type)
+        _registry()._audit("activate_ui_control", {}, "success", f"Activated {request.control_type}: {request.name}")
+        return result
+    except UIAutomationError as exc:
+        _registry()._audit("activate_ui_control", {}, "blocked", str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
