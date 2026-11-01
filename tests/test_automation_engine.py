@@ -52,3 +52,12 @@ def test_engine_caps_plan_and_stops_after_cancelled_step() -> None:
     results = execute_plan(engine, [step, step], lambda current, index: calls.append(index) or None)
     assert calls == [1]
     assert results == [{"step": 1, "status": "cancelled"}]
+
+
+def test_engine_accepts_window_action_from_conversational_planner() -> None:
+    from nova.core.computer.intents import plan_multi_step_intent
+
+    plan = plan_multi_step_intent("Set volume to 35 then minimize Chrome")
+    assert plan is not None
+    validated = AutomationEngine().validate_plan(plan)
+    assert validated[1]["action_id"] == "window.minimize"
