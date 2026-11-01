@@ -279,7 +279,7 @@ class NovaWindow(QMainWindow):
         self._build_ui()
         self._setup_windows_shell()
         self._ensure_backend_process()
-        self._check_status()
+        QTimer.singleShot(1500, self._check_status)
 
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._check_status)
