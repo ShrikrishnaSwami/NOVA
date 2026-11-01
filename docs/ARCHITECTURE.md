@@ -110,3 +110,8 @@ The Windows computer integration lives in `src/nova/core/computer/registry.py`; 
 - The desktop currently has deterministic request routing for direct app launches. A broader natural-language planner that can choose among discovery, search, open, read, and Windows settings tools is the next milestone; model output must never become executable authority.
 
 This is a local-user permission boundary, not a hardened multi-user security boundary. Keep the API bound to loopback; do not expose it to a network without adding authentication and a stronger authorization design.
+
+
+## Natural-language computer planner
+
+The first planner layer is deterministic and deliberately narrow. It recognizes filename searches, content searches, and explicit full-path open/read/list requests, then proposes typed actions to the desktop. It does not execute actions or treat model output as authority. The desktop shows a one-action confirmation before the API call; file contents remain local in the computer-controls panel. Filename search can scan all configured/accessibly discovered roots when no root is supplied. More conversational multi-step planning, Windows Search integration, OCR, and app/window automation remain later milestones.
