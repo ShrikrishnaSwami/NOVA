@@ -1,75 +1,101 @@
 # NOVA
 
-NOVA is an open-source hybrid AI desktop assistant for Windows, built around voice, memory, local and cloud intelligence, and permission-based computer control.
+**NOVA is an open-source, Windows-first desktop AI assistant.** It combines a desktop interface, voice interaction, local persistent memory, conversation history, scheduled read-only tasks, system awareness, and permission-gated Windows controls.
 
-The project is in active development. NOVA includes a local FastAPI service, provider-independent AI chat, persistent memory, offline voice options, and permission-gated Windows desktop integration.
+The project is under active development. The current source milestone is **0.1.7**. The Windows installer is built by GitHub Actions; check the workflow before treating a particular build as downloadable.
 
-## Current capabilities
+- Repository: https://github.com/ShrikrishnaSwami/NOVA
+- Windows installer workflow: [Actions](https://github.com/ShrikrishnaSwami/NOVA/actions/workflows/windows-installer.yml)
+- Documentation: [docs/](docs/)
 
-- Local FastAPI service bound to `127.0.0.1`, managed by the Windows desktop session.
-- Health endpoint at `/health`.
-- Interactive API documentation at `/docs`.
-- Chat endpoint at `/chat`.
-- Provider status at `/system/ai`.
-- Echo setup mode that works without model credentials.
-- OpenAI-compatible adapter for local model servers and compatible hosted APIs.
-- PySide6 Windows desktop client with tray lifecycle, single-instance lock, global hotkey, background startup, and managed local API process.
-- Local push-to-talk and opt-in "Hey NOVA" wake-word voice sessions, with interruptible local speech output.
-- SQLite-backed persistent conversations and user-controlled long-term memories.
-- Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
-- Memory review, approval, editing, and deletion API.
-- Permission-gated Windows integration that discovers installed applications and scans accessible local drives by default.
-- Local audit log for completed or blocked computer operations.
-- Read-only Windows session awareness: OS and resource overview, running-process inventory, visible-window inventory, and foreground-window detection.
+## What NOVA can do today
 
-## Requirements
+### Desktop and lifecycle
+- Runs as a Windows desktop application built with PySide6.
+- The desktop starts and manages its own loopback-only API backend when needed. You do not need to open a terminal or manually start the backend when using the installed app.
+- Supports a notification-area/tray lifecycle, optional Windows sign-in startup, a global `Ctrl+Alt+Space` shortcut, and single-instance protection.
+- Stores user settings and memory separately from the application install directory so upgrades can preserve them.
+- Closing the main window hides NOVA; use **Quit NOVA** from the tray menu to exit.
 
-- Windows 10 or 11
-- Python 3.11 or newer (Python 3.13 is supported)
-- Git
+### AI chat and tools
+- Supports an echo setup mode and an OpenAI-compatible chat-completions provider.
+- Can connect to local model servers and compatible hosted endpoints.
+- Supports streamed chat responses and bounded conversation context.
+- The model can propose registered tools. NOVA validates proposals, shows the requested actions and arguments, and requires explicit approval before execution.
+- Tool results—including failures and skipped steps—are returned to the model so it can explain what actually happened.
+- Tool chains are capped at five calls and stop after the first failed step.
 
-## Install
+### Voice
+- Offline speech recognition through Vosk.
+- Optional local “Hey NOVA” wake-word listening.
+- Push-to-talk remains available.
+- Local speech output through Windows voices using pyttsx3.
+- Active speech playback can be interrupted.
+- Wake-word listening is opt-in and can be disabled. Microphone audio is processed locally; NOVA does not upload it to a cloud speech service.
 
-```powershell
-git clone https://github.com/ShrikrishnaSwami/NOVA.git
-cd NOVA
+### Memory and conversations
+- Conversations and long-term memories are stored in a local SQLite database.
+- Memory retrieval uses local feature-hash vectors and hybrid semantic/lexical ranking; no hosted embedding API or separate vector database is required.
+- Memories can be reviewed, approved, edited, deleted, searched, and pinned.
+- The desktop memory manager displays memory totals, pinned count, and retrieval usage.
+- Conversation history can be searched by title and message contents, opened/resumed, renamed, pinned, and deleted.
+- Pinned memories and conversations are prioritised in their respective lists.
 
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+### Windows awareness and controls
+- Read-only system overview, process inventory, visible-window inventory, and foreground-window information.
+- Discover and launch installed Windows applications.
+- Search accessible local folders and supported text/document files.
+- Read or open selected local files after confirmation.
+- Control supported visible windows: focus, minimize, restore, maximize, and request a graceful close.
+- Adjust supported master volume and internal display brightness, and open native Windows Search.
+- Use a limited set of Windows UI Automation actions on accessible controls, with explicit approval.
+- Optional battery and active-window awareness while the Computer Controls panel is open.
 
-python -m pip install --upgrade pip
-pip install -e ".[dev,desktop,voice,windows,documents]"
+### Scheduled tasks and alerts
+- Persistent local scheduler with one-time, daily, and weekly recurrence.
+- Jobs require approval before they can run.
+- Current scheduled actions are read-only system and storage reports.
+- Tasks can be listed, paused, cancelled, and inspected through execution history.
+- Optional native Windows notifications can report NOVA replies, task outcomes, and system alerts.
 
-Copy-Item .env.example .env
-```
+## What NOVA does not do
 
-If PowerShell blocks activation, run this in the same terminal:
+NOVA is not an unrestricted autonomous computer operator. It does not expose arbitrary shell commands, generated scripts, unrestricted Python execution, or arbitrary process termination. Model output is untrusted input. Registered actions are validated and permission-gated; physical actions require user confirmation.
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
-```
+Some subsystems are simulations, not hardware integrations. In particular, the aerospace, smart-grid, thermal, and holographic examples in the runtime tool registry are labelled simulations and do not control physical devices.
 
-## Windows desktop installer
+NOVA does not read notifications generated by other Windows applications. It does not silently capture the screen or camera. Gesture control is a design document only and is not currently implemented.
 
-A per-user Windows installer is built by the **Windows installer** GitHub Actions workflow. Open the repository's Actions tab, run **Windows installer**, and download the `NOVA-Windows-Installer` artifact when the workflow completes. Tagged releases (`v*`) also publish the installer as a GitHub Release asset.
+## Install NOVA on Windows
 
-The installer:
-- Installs under the current user's `%LOCALAPPDATA%\\Programs\\NOVA` directory and does not require administrator privileges.
-- Creates Start Menu shortcuts and optionally a desktop shortcut.
-- Copies the example configuration to `%APPDATA%\\NOVA\\.env` only on first install, preserving any existing settings.
-- Keeps SQLite memory under `%LOCALAPPDATA%\\NOVA`, separate from the installed application.
-- Offers automatic sign-in startup in the notification area, so NOVA and its local database/scheduler can start without opening a terminal or the main interface.
-- Bundles the small offline Vosk English model used by hands-free voice mode.
-- Can be uninstalled through Windows Settings → Apps → Installed apps.
+The easiest way to use NOVA is the packaged Windows installer.
 
-The installed application runs in the signed-in user's desktop session. It is not a privileged Windows service: desktop UI Automation and notification APIs need the interactive user's session. Notification preferences are stored locally in `%APPDATA%\\NOVA\\preferences.json`. NOVA starts a separate loopback-only API process when needed and stops only the process it owns when you explicitly quit.
+1. Open the [NOVA Windows installer workflow](https://github.com/ShrikrishnaSwami/NOVA/actions/workflows/windows-installer.yml).
+2. Select the latest successful run for the version you want.
+3. Scroll to **Artifacts** and download **NOVA-Windows-Installer**.
+4. Extract the downloaded ZIP.
+5. Run the included `NOVA-Setup-<version>.exe`.
+6. Launch NOVA from the Start Menu or desktop shortcut.
 
-After installation, open **NOVA → Open NOVA settings** from the tray menu to edit the per-user `.env` file. The default template is configured for the local Bionic OpenAI-compatible endpoint at `http://127.0.0.1:1235/v1` with model `qwen3-1.7b`. Start Bionic and load that model before asking NOVA to use local AI. If your local runtime uses a different model or port, update the settings file and restart NOVA.
+The artifact is a ZIP containing the installer executable. The installer is per-user and does not require administrator privileges. The workflow also creates **NOVA-Portable-Windows**, which contains the complete portable application folder. Extract the entire folder and run `NOVA\NOVA.exe`; do not move the executable out of its bundled folder.
 
-## Configure a local model
+A successful workflow run is required before its artifacts are available. Do not use an in-progress or failed run as an installer source.
 
-NOVA connects to any server that implements the OpenAI-compatible chat-completions API. Start your local model server, then configure the local `.env` file:
+## First-time setup
+
+1. Launch NOVA.
+2. Open **NOVA settings** from the desktop or tray menu.
+3. Configure the AI provider and model endpoint in the settings file if you want model-backed responses.
+4. Start your selected local model runtime, if using a local model.
+5. Return to NOVA and test a text conversation.
+6. Optionally configure your microphone, test it, and enable **Hey NOVA**.
+7. Review notification, sign-in startup, and microphone preferences before enabling them.
+
+A fresh install can run in echo/setup mode without model credentials. For useful AI responses, configure a model provider.
+
+### Local model configuration
+
+NOVA uses an OpenAI-compatible chat-completions interface. Example configuration for a local server:
 
 ```dotenv
 NOVA_AI_PROVIDER=openai_compatible
@@ -79,184 +105,129 @@ NOVA_AI_API_KEY=
 NOVA_AI_TIMEOUT_SECONDS=120
 ```
 
-Use the exact model ID and API address shown by your model runtime. Keep `.env` private and never commit credentials.
+Use the exact model ID and URL shown by your runtime. NOVA does not bundle a large language model. Local model performance depends on the runtime, model size, quantization, and available CPU/GPU acceleration.
 
-## Run NOVA
+The initial template may contain a Bionic-compatible example endpoint. If you use another runtime, replace it with that runtime's actual endpoint. Keep API keys and other secrets in the private user configuration file; never commit them.
 
-Start the desktop interface:
+## Voice setup
+
+The packaged Windows application includes the small English Vosk model. Open NOVA settings to select a microphone and run a test. Enable **Hey NOVA** only when you want continuous local wake-word listening. Push-to-talk is available as an alternative.
+
+See [Local voice setup](docs/VOICE_SETUP.md) for the complete explanation and troubleshooting steps.
+
+## Memory and conversation usage
+
+### Memory manager
+Open **NOVA Memory** from the desktop interface.
+
+- Search by memory content or category.
+- Review pending suggestions and approve them when appropriate.
+- Edit or delete a selected memory.
+- Pin important memories or unpin them.
+- See total memories, pinned memories, and retrieval counts.
+- Pinned memories are prioritised during retrieval.
+
+NOVA avoids storing credentials and other secret-like content. Some sensitive personal facts are held for review rather than automatically used. Memory is stored locally in SQLite.
+
+### Conversation history
+Open **Conversation history** from the desktop.
+
+- Search across conversation titles and message contents.
+- Open a conversation to resume it.
+- Rename a conversation.
+- Pin or unpin it; pinned conversations appear first.
+- Delete a conversation and its messages after confirmation.
+
+### Local data locations
+
+On Windows, the installed app uses:
+
+- Settings: `%APPDATA%\NOVA\.env`
+- Preferences: `%APPDATA%\NOVA\preferences.json`
+- SQLite database: `%LOCALAPPDATA%\NOVA\nova_memory.sqlite3`
+- Installed application: `%LOCALAPPDATA%\Programs\NOVA`
+
+Upgrades are designed to preserve the settings and SQLite database. Back up the database and settings file before manually changing or removing user data.
+
+## Computer controls
+
+Open **Computer controls** in the desktop interface. The available actions depend on Windows support and optional dependencies.
+
+- Application discovery and launch use the Windows application catalogue.
+- File operations are scoped to configured or discovered local roots and the current Windows user's access.
+- Read, open, list, and other consequential operations require confirmation.
+- Window actions are limited to a selected visible window and require confirmation. Close sends a normal Windows close request; the target application may show a save prompt.
+- UI Automation can activate supported accessible controls or enter text into a uniquely identified non-password field. It cannot operate reliably on applications that expose no accessibility information.
+- System volume and brightness controls depend on the hardware and optional Windows integrations.
+
+The default local drive discovery is not a promise that NOVA can bypass Windows access controls. Protected folders remain subject to the signed-in account's permissions. See [Architecture](docs/ARCHITECTURE.md) for the boundaries and [security model](docs/WINDOWS_INSTALLER.md).
+
+## Scheduled tasks
+
+The scheduler currently supports read-only system and storage reports. Create a task, inspect its details, and explicitly approve it before it can run. Supported recurrence options are once, daily, and weekly. Tasks can be paused or cancelled and have local execution history.
+
+See [Task scheduler](docs/TASK_SCHEDULER.md) for API routes and examples.
+
+## API and developer information
+
+The local backend defaults to `http://127.0.0.1:8000`:
+
+- `GET /health` — health check.
+- `GET /docs` — interactive API documentation.
+- `POST /chat` and `POST /chat/stream` — chat.
+- `GET /system/ai` — configured AI provider status.
+- `GET /memory`, `GET /memory/stats`, `GET /memory/search` — memory.
+- `GET /conversations`, `GET /conversations/search` — conversation history.
+- `GET /tasks` and `GET /tasks/capabilities` — scheduler.
+- `GET /runtime/state` and `GET /runtime/tools` — runtime telemetry and registered tools.
+- `GET /computer/automation/capabilities` — supported automation action contracts.
+
+The installed application starts and manages the backend itself. You do not need these endpoints for ordinary desktop usage.
+
+### Development checkout
+
+For contributors working from source, use Windows 10/11 and Python 3.11 or newer. Python 3.13 is supported by the current CI matrix.
+
+```powershell
+git clone https://github.com/ShrikrishnaSwami/NOVA.git
+cd NOVA
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -e ".[dev,desktop,voice,windows,documents]"
+Copy-Item .env.example .env
+pytest
+```
+
+Run the desktop during development with:
 
 ```powershell
 nova-desktop
 ```
 
-NOVA checks whether its local API is already healthy. If not, it starts a backend process bound only to the configured loopback address and port, then connects the desktop automatically. When you choose **Quit NOVA**, it stops only the backend process that this desktop instance started; it never terminates a backend that was already running.
-
-For development, you can still start the backend manually in a separate terminal:
+Run the backend separately only when you are developing or testing the API:
 
 ```powershell
 uvicorn nova.main:app --reload
 ```
 
-The desktop client normally connects to `http://127.0.0.1:8000`. To use a different backend address, set `NOVA_API_URL` before launching it:
+The installed desktop application does not require this manual development workflow.
 
-```powershell
-$env:NOVA_API_URL = "http://127.0.0.1:8000"
-nova-desktop
-```
+## Documentation
 
-You can also use the backend without the desktop client:
-
-- Health: http://127.0.0.1:8000/health
-- API docs: http://127.0.0.1:8000/docs
-- AI status: http://127.0.0.1:8000/system/ai
-
-
-## Scheduled tasks (NOVA 2.0 foundation)
-
-NOVA now has a persistent local scheduler with approval, once/daily/weekly recurrence, pause/cancel controls, and execution history. Its first registered tasks are read-only system and storage reports. Every task begins in a pending-approval state; only the exact approved task can run. The scheduler does not execute arbitrary commands or model-generated scripts. See [docs/TASK_SCHEDULER.md](docs/TASK_SCHEDULER.md) for endpoints, examples, and the current security boundary.
-
-Useful endpoints:
-- `GET /tasks/capabilities` — inspect registered task actions.
-- `POST /tasks` — create a task awaiting approval.
-- `GET /tasks` — list scheduled tasks.
-- `POST /tasks/{id}/approve`, `/pause`, and `/cancel` — manage a task.
-- `GET /tasks/{id}/history` — inspect its execution history.
-
-## Local voice (optional)
-
-NOVA can transcribe microphone input locally with Vosk and read responses aloud using installed Windows speech voices through pyttsx3. The installed Windows build bundles its small Vosk model. "Hey NOVA" wake-word listening is opt-in, visibly indicated, saved locally, and can be disabled from the composer. When enabled, NOVA can start hidden at Windows sign-in, listen locally, interrupt speech playback, capture a command, and speak the response. Push-to-talk remains available. Audio is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for details.
-
-NOVA's installed configuration is read from `%APPDATA%\\NOVA\\.env` on Windows. Environment variables still override values in that file. Development checkouts continue to use a project-local `.env` when no per-user settings file exists.
-
-## Persistent memory
-
-NOVA stores its conversation history and long-term memories in a local SQLite database. On Windows the installed application stores it at `%LOCALAPPDATA%\\NOVA\\nova_memory.sqlite3`; development installs on other platforms default to `~/.nova/nova_memory.sqlite3`. Override it with `NOVA_MEMORY_DB_PATH` in your private settings file.
-
-Memory retrieval uses deterministic local feature-hash vectors and cosine similarity. It does not send memory text to an embedding API and does not require a separate vector database. This is intentionally lightweight; a dedicated local embedding model can replace the encoder later.
-
-Memory policy:
-- Explicit `remember that ...` requests are saved.
-- Safe preferences, interests, and project facts may be saved automatically.
-- High-impact suggestions are marked pending until approved.
-- Passwords, API keys, financial secrets, and government identifiers are never saved. Detected sensitive personal facts (such as health details or contact information) are held pending your approval.
-- Memories can be listed, approved, edited, and deleted through the API.
-
-Useful endpoints:
-- `GET /memory` — list memories.
-- `GET /memory?status=pending` — review suggestions.
-- `POST /memory/{id}/approve` — approve a suggestion.
-- `PATCH /memory/{id}` — edit a memory.
-- `DELETE /memory/{id}` — delete a memory.
-- `GET /conversations` and `GET /conversations/{id}` — browse saved conversations.
-- `DELETE /conversations/{id}` — delete a conversation and its messages.
-
-## Computer controls (Stage 4)
-
-Open **Computer controls** in the desktop sidebar. The current OS-discovery foundation supports:
-
-- Discover Windows Start Menu shortcuts, registered packaged apps, and classic installed desktop apps.
-- Discover ready local drive roots automatically when `NOVA_COMPUTER_ALLOWED_ROOTS` is empty. This is the full-accessible-drive mode selected for NOVA; Windows still enforces the permissions of the signed-in account.
-- Override automatic discovery with specific folders in the private `.env` file if you later want a narrower scope. Separate multiple paths with semicolons:
-
-```dotenv
-NOVA_COMPUTER_ALLOWED_ROOTS=C:\\Users\\YourName\\Documents;C:\\Users\\YourName\\Desktop
-```
-
-- Search file and folder names, search inside supported text/code and PDF/Word/Excel documents, list folders, read supported files up to 2 MB, and ask Windows to open a discovered path.
-- Require a separate confirmation before opening or reading items. Search is read-only; inaccessible or protected locations are skipped by Windows permissions.
-- Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
-
-Text/code search supports TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, INI, HTML, XML, SQL, JavaScript, TypeScript, CSS, Java, C/C++, PowerShell, batch, shell, and RTF. PDF, DOCX, XLSX and XLSM extraction is available through free local libraries. Install it with `pip install -e ".[documents]"`. PDF extraction is bounded to 100 pages; spreadsheets are bounded to 30 sheets and 5,000 rows per sheet. Search results are capped at 500. This is still not a full Windows Search index, OCR system, or semantic document index.
-
-The API rejects actions unless the desktop sends an explicit approval flag. App launch requests resolve against the live Windows application catalogue. Classic apps are discovered through Start Menu shortcuts, Windows Start Apps, uninstall metadata, install locations and App Paths. Launches use the Windows Shell rather than constructing shell commands. If multiple installed apps match a request, NOVA asks you to choose.
-
-Useful endpoints:
-- `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
-- `POST /computer/actions` — execute one registered action after approval.
-- `GET /computer/audit` — inspect recent local action records.
-
-### Windows session integration and automation
-
-- NOVA starts in the current signed-in user's desktop session, keeps one instance per user, and can run hidden in the notification area.
-- `Ctrl+Alt+Space` reopens the UI; closing the window hides it, while **Quit NOVA** stops the desktop and its own API child process.
-- Optional sign-in startup is controlled from the tray menu and writes only the current user's NOVA startup entry.
-- NOVA-generated reply notifications are off by default and can be explicitly enabled from the tray menu. A one-off test notification is available there too; Windows may still require notifications to be enabled in **Settings → System → Notifications**.
-- The shared automation engine publishes its bounded action contracts at `GET /computer/automation/capabilities`. Multi-step plans are validated as a whole, capped at five steps, and stop after the first cancelled or failed action.
-- Battery and active-window awareness are opt-in and session-scoped.
-
-NOVA does not currently read the notification contents belonging to other Windows applications. Windows' notification-listener API requires a packaged application identity and the restricted `userNotificationListener` capability, plus explicit OS user consent. The current per-user Inno Setup installer does not grant that capability; reading other apps' notifications is deliberately not simulated or silently enabled.
-
-## Local model benchmarking
-
-See [docs/LOCAL_MODEL_BENCHMARK.md](docs/LOCAL_MODEL_BENCHMARK.md) for a repeatable benchmark of models exposed by your local runtime. It measures median TTFT and total response time without sending prompts to a cloud service or changing NOVA's configuration.
-
-## Tests
-
-```powershell
-pytest
-```
-
-## Safety direction
-
-NOVA does not give a language model unrestricted shell or computer access. Computer tools are explicitly registered, narrowly scoped, logged, and gated by desktop approval. Model output is untrusted input, never executable authority.
+- [Architecture and implementation boundaries](docs/ARCHITECTURE.md)
+- [Windows installer and lifecycle](docs/WINDOWS_INSTALLER.md)
+- [Local voice setup](docs/VOICE_SETUP.md)
+- [Memory, tools, and voice internals](docs/MODEL_TOOLS_AND_VOICE.md)
+- [Scheduled tasks](docs/TASK_SCHEDULER.md)
+- [Runtime architecture](docs/NOVA_3_RUNTIME.md)
+- [Local model benchmarking](docs/LOCAL_MODEL_BENCHMARK.md)
+- [Gesture control design (not implemented)](docs/GESTURE_CONTROL.md)
 
 ## Roadmap
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and milestones, and [docs/WINDOWS_INSTALLER.md](docs/WINDOWS_INSTALLER.md) for packaging, installation, and the Windows session lifecycle.
+The next milestones focus on improving proactive assistance, reliable reminder workflows, desktop lifecycle and status visibility, broader user-facing management, and continued Windows end-to-end testing. Planned features are not current capabilities until implemented, tested, and included in a successful build.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
-
-### Response performance
-
-NOVA exposes `POST /chat/stream` for server-sent token events, reuses its provider's HTTP connection pool, and reports time-to-first-token and total-generation timing. The desktop batches stream updates to reduce UI overhead.
-
-The default local-chat settings are tuned for responsiveness:
-
-- `NOVA_AI_MAX_TOKENS=512` limits generated output. Increase to 1024-2048 when you need longer explanations or code.
-- `NOVA_AI_CONTEXT_MESSAGES=8` limits the previous conversation history sent with each prompt.
-- `NOVA_AI_QWEN_NO_THINK=true` adds Qwen3's documented `/no_think` prompt switch for Qwen3 model IDs. Add `/think` to a message when you want deeper reasoning for that turn.
-- `NOVA_AI_TOP_P=0.8` uses Qwen3's recommended non-thinking sampling value.
-
-These settings are configurable in your private `.env`. Model residency is controlled by the local runtime, not NOVA's generic OpenAI-compatible adapter. If Bionic offers a keep-loaded or auto-unload setting, keep the model loaded while using NOVA. Actual token generation speed is still limited by the model, quantization, and available CPU/GPU acceleration.
-
-
-### Natural-language computer requests
-
-NOVA's first deterministic computer planner can route requests such as:
-
-- "Find my physics assignment" — search filenames across accessible drives.
-- "Search inside my files for thermodynamics" — search supported local text and document contents.
-- "Open C:\\Users\\you\\Documents\\notes.txt" — ask before opening an explicit path.
-- "Read C:\\Users\\you\\Documents\\notes.txt" — ask before reading; content is displayed locally and is not sent to the model.
-- "List files in C:\\Users\\you\\Documents" — ask before listing a folder.
-
-Every planned action is reviewed through a one-action confirmation dialog. The planner is intentionally deterministic at this stage: it does not execute model-generated commands, and it supports bounded multi-step plans for recognized Windows system and window actions. Every step is confirmed separately; the plan stops immediately if a step is cancelled or fails.
-
-
-## Windows OS awareness (first integration layer)
-
-NOVA exposes read-only information about the current Windows session:
-
-- `GET /computer/system` — OS, hardware/runtime details, resource metrics via the core psutil dependency, and the foreground window.
-- `GET /computer/processes` — bounded process inventory (PID, process name, status, resident memory); it deliberately omits command lines and environment variables.
-- `GET /computer/windows` — visible top-level window titles and owning process IDs.
-- `POST /computer/windows/actions` — focus, minimize, restore, or maximize a selected visible window after explicit approval.
-- `POST /computer/system/volume` and `/computer/system/brightness` — adjust supported Windows audio/display hardware after confirmation.
-- `POST /computer/windows/search` — open native Windows Search for a query after confirmation.
-
-Process and resource metrics use the core psutil dependency. Window enumeration uses the Windows API directly. These endpoints do not terminate processes, inject input, capture screenshots, or bypass Windows permissions. The desktop also exposes a confirmed **Control a window** action: choose a visible window, then explicitly approve focusing/switching to it, minimizing, restoring, or maximizing it. The API supports only those four operations; it does not close apps or inject keyboard/mouse input. Window controls are Windows-only and require the target to remain a visible top-level window.
-NOVA can also handle `set volume to 35`, `change brightness to 70%`, and `search Windows for physics notes`. Each is parsed into a fixed typed operation and confirmed before execution. Volume adjustment uses the optional `pycaw` Windows audio extra; install it with `pip install -e ".[windows]"`. Brightness control uses the Windows WMI interface and may not work with external monitors or every laptop panel. Windows Search opens the native indexed-search experience in Explorer; NOVA does not scrape or bypass its index.
-
-The **Interact with an app** control uses Windows UI Automation (optional `pywinauto`) to inspect supported accessible controls in an open window. It can activate a single named enabled button, tab, menu item, hyperlink, checkbox, or radio button after a separate confirmation. The **Enter text into an app** control can enter up to 2,000 characters into one uniquely named, visible, enabled, non-password text field after confirmation. Password fields are excluded; entered text is not written to the audit log. Some applications expose few or no accessible controls.
-
-NOVA now integrates with the Windows shell: it can minimize to the notification area, reopen with the global `Ctrl+Alt+Space` shortcut, optionally register itself to start at sign-in under the current user's Run key, and show native Windows toast notifications when a reply arrives while hidden. Right-click the tray icon to open NOVA, toggle startup, send a test notification, or quit. Closing the main window hides NOVA in the tray; use **Quit NOVA** to fully exit.
-
-The Computer Controls panel also offers opt-in battery/power event monitoring. It checks battery level and charging state once per minute while the panel is open, and can notify at 20% or below or when the power connection changes. This is polling-based and is not a subscription to all Windows event channels. It stops when the panel closes.
-
-The Computer Controls panel also offers temporary active-app awareness. It is off by default, polls the foreground window title only after you opt in, stops when the panel closes, and does not save titles or send them to the AI.
-
-You can also use short natural-language window commands in chat, such as "Switch to Chrome", "Minimize Notepad", "Restore Explorer", or "Maximize Calculator". NOVA matches the request against currently visible window titles, asks you to choose if multiple windows match, and always asks for confirmation before changing a window.
-

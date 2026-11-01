@@ -1,167 +1,162 @@
 # NOVA architecture
 
-## Runtime
+This document describes the implementation represented by the current `main` branch (source milestone 0.1.7). It distinguishes shipped behaviour from future ideas; a roadmap item is not a capability until code and tests exist.
 
-NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional PySide6 desktop client communicates with that process over loopback HTTP. The UI does not call the model runtime directly; model access remains behind the backend provider interface.
+## High-level design
 
-## Desktop client
-
-- Entry point: `nova-desktop` (module: `nova.desktop`).
-- Optional dependency group: `desktop` installs PySide6.
-- The desktop client uses a worker thread for HTTP requests so model inference does not freeze the UI.
-- The animated identity visual is drawn with Qt primitives to avoid external assets and keep GPU requirements modest.
-- The backend persists conversation turns in SQLite; the desktop assigns a stable conversation ID for each chat session.
-- The backend retrieves relevant approved memories and adds them as bounded context to chat requests.
-- The desktop remains a thin client; memory management is exposed through typed API endpoints.
-- The backend URL can be overridden with `NOVA_API_URL`.
-- Optional voice input runs Vosk in a worker thread and reads audio only after the user clicks Talk; optional speech output uses local Windows SAPI voices through pyttsx3.
-- Voice dependencies are isolated in the `voice` extra, and the Vosk model is downloaded separately and configured with `NOVA_VOSK_MODEL_PATH`.
-- Computer controls discover Start Menu shortcuts, registered Windows Start Apps, classic uninstall registry entries, install locations, and App Paths. Direct app-launch requests are matched against the live catalogue; ambiguous matches are presented for user selection. Launching delegates to the Windows Shell and requires per-launch confirmation.
-- When no explicit `NOVA_COMPUTER_ALLOWED_ROOTS` are configured, the backend discovers ready local drives and scopes file operations to paths the current Windows account can access. Search skips inaccessible directories, symbolic links, and junctions.
-- Text and code files can be searched/read locally. The optional `documents` dependency group adds bounded extraction for PDF, DOCX, XLSX, and XLSM files. No document content is sent to the model unless a later, explicit chat workflow chooses to include it.
-
-## Windows document extraction
-
-`src/nova/core/computer/registry.py` routes document extraction by file extension. PDF uses `pypdf`, Word uses `python-docx`, and Excel uses `openpyxl`; these are optional, free, local dependencies installed with `pip install -e ".[documents]"`. Extraction is bounded by file size, page/sheet/row limits, and output character limits. Search results expose short previews; full document text is shown locally in the computer controls dialog. OCR, legacy binary `.doc`, and persistent Windows Search indexing are not yet implemented.
-
-## AI provider layer
-
-NOVA defines a provider contract in `src/nova/core/ai/types.py`. Provider implementations live behind that contract, so conversation orchestration does not depend on a particular model vendor or runtime.
-
-The current adapters are:
-
-- `echo`: safe setup mode that lets a fresh installation exercise the chat API without credentials.
-- `openai_compatible`: adapter for local model servers and compatible hosted APIs using the chat-completions request format. It can connect to a local runtime such as Bionic, LM Studio, or llama.cpp server, or a compatible cloud endpoint.
-
-Provider selection is controlled by environment variables. No API key is required for local endpoints that do not use authentication. Credentials belong in the local `.env` file and must never be committed.
-
-## Request flow
+NOVA is split into a Windows desktop client, a local API/backend, provider adapters, and local persistence.
 
 ```text
-PySide6 desktop UI
-       |
-       v
-Local FastAPI API (loopback)
-       |
-       v
-Conversation endpoint
-       |
-       v
-Provider adapter
-       |
-       v
-Bionic / local model runtime
+PySide6 desktop application
+  |  chat, history, memory, settings, approvals, voice, tray
+  v
+Loopback FastAPI service (127.0.0.1)
+  |-- chat orchestration and provider interface
+  |-- tool registry and typed Windows APIs
+  |-- task scheduler and system-state monitor
+  |-- SQLite conversation and memory store
+  v
+Configured OpenAI-compatible model endpoint
+  (local model runtime or compatible hosted service)
 ```
 
-The SQLite memory service sits beside the provider adapter and is independent of model vendor/runtime.
+The desktop is the user-facing application. It manages a backend child process when no healthy local API is already running. The backend is bound to loopback by default; it is not intended to be exposed as an unauthenticated network service.
 
-## Trust boundaries
+## Windows desktop and lifecycle
 
-- Model responses are untrusted input, not executable instructions.
-- The chat endpoint accepts only user/assistant history from clients; clients cannot inject system-role messages.
-- Tools expose narrow, typed operations rather than arbitrary system access.
-- Every tool has a declared risk level and permission policy.
-- User approval is checked by application code, never inferred from model text.
-- Secrets are read from local environment configuration and are never stored in source control.
-- The local API must remain loopback-only unless an authenticated network mode is explicitly designed.
+- Desktop entry point: `nova-desktop` / `nova.desktop`.
+- UI framework: PySide6.
+- The desktop uses worker threads for operations that would otherwise block the UI.
+- The installed application is packaged with PyInstaller and distributed through a per-user Inno Setup installer.
+- It can minimise to the Windows notification area, optionally start at sign-in, and reopen through `Ctrl+Alt+Space`.
+- A single-instance lock prevents multiple desktop sessions for the same user profile.
+- Closing the main window hides it; **Quit NOVA** exits the desktop and the API child process it owns.
+- It does not stop an API process that it did not start.
+- The installed app runs in the interactive signed-in user's session, not as LocalSystem.
 
-## Development milestones
+The packaged application is self-starting: users launch the shortcut or executable. Starting a terminal, manually launching Uvicorn, or entering source commands is a development-only workflow.
 
-1. API and configuration foundation.
-2. Provider contract, setup-mode chat, and OpenAI-compatible adapter.
-3. Local model runtime integration.
-4. First desktop UI with threaded API requests.
-5. SQLite conversation history and local vector memory with approval, editing, and deletion controls.
-6. Permission manager, tool registry, and audit log (first implementation now available).
-7. Streaming text conversation.
-8. Voice pipeline foundation: local push-to-talk transcription and local speech output. Next: user-approved file handoff to chat and carefully scoped natural-language tool planning.
+## AI provider and chat flow
 
+The provider contract is defined under `src/nova/core/ai`. Current modes include:
 
-## Streaming and request performance
+- `echo`: setup/testing mode that does not require model credentials.
+- `openai_compatible`: OpenAI-compatible chat-completions API adapter. It can connect to a local inference server or a compatible hosted endpoint.
 
-- The backend reuses one provider instance and asynchronous HTTPX connection pool, closed during FastAPI shutdown.
-- `POST /chat/stream` emits token events followed by `ttft_ms` and `total_ms`; `POST /chat` remains supported.
-- The desktop batches incoming stream fragments into short UI updates instead of repainting and scrolling for every fragment.
-- `NOVA_AI_MAX_TOKENS` bounds response generation (default 512); raise it for longer answers.
-- `NOVA_AI_CONTEXT_MESSAGES` bounds previous conversation context (default 8 messages; maximum 20).
-- For model IDs containing `qwen3`, `NOVA_AI_QWEN_NO_THINK=true` adds Qwen's documented `/no_think` prompt switch. A user can request reasoning for an individual turn with `/think`.
-- `NOVA_AI_TOP_P` defaults to 0.8, matching Qwen3's recommended non-thinking sampling settings.
-- Keeping model weights resident is a model-runtime setting. There is no universal keep-alive parameter across OpenAI-compatible servers; configure Bionic's model unloading/residency setting if available.
-- These controls reduce prompt and output work but cannot overcome the CPU throughput limit of a small local machine.
+NOVA does not bundle a foundation model. Model selection, model weights, inference speed, and residency are controlled by the configured runtime/provider.
 
+Chat requests are handled by the backend. It applies the assistant system policy, bounded conversation context, and relevant approved memories before calling the provider. Streaming is available through `POST /chat/stream`; the ordinary `POST /chat` endpoint remains available.
 
-## Persistent memory
+## Tool planning, validation, and approval
 
-The memory service is implemented in `src/nova/core/memory/store.py`. It uses the Python standard-library SQLite driver and stores conversations, messages, memory records, and normalized 256-dimensional feature-hash vectors. Retrieval ranks approved memories by cosine similarity locally. The deterministic encoder avoids a network dependency, external embedding service, model download, and GPU requirement; it is intentionally a lightweight first vector-retrieval implementation rather than a transformer embedding model.
+The runtime agent can ask the configured model to propose tool calls. Proposals are not authority to act.
 
-Memory capture uses a hybrid policy: explicit remember requests and recognized low-risk preferences/projects are stored automatically; selected high-impact statements are queued as pending; credentials, financial secrets, and government identifiers are rejected; detected sensitive personal facts are queued for user approval. The API exposes approval, edit, and delete operations. Memory is inserted as contextual data, never as executable instructions.
+1. The model returns a structured proposal.
+2. NOVA validates tool names and arguments against the registered schema.
+3. The desktop shows the proposed action and its arguments.
+4. The user approves or denies the operation.
+5. The backend executes only the registered handler after approval.
+6. Actual results, including failures, are returned to the model for explanation.
 
+Chains are limited to five calls and validated in full before the first handler runs. Execution stops after the first failed step; later steps are marked skipped. Unknown tools, malformed arguments, and unregistered actions fail closed.
 
-## Computer control and permission model
+The registry includes read-only system and visible-window information, plus explicitly labelled simulation-only subsystem tools. Mutating Windows operations use separate typed endpoints and confirmation flows. NOVA does not expose arbitrary shell, eval, generated Python, or unrestricted process execution.
 
-The Windows computer integration lives in `src/nova/core/computer/registry.py`; its API is in `src/nova/api/computer.py`, and the desktop approval surface is `src/nova/desktop_computer.py`.
+## Windows computer integration
 
-- Application discovery combines current-user/all-users Start Menu shortcuts, the registered Windows Start Apps catalogue, classic uninstall registry entries, and App Paths. Executable launch is limited to paths discovered from those OS sources; packaged apps use their registered AppID.
-- When `NOVA_COMPUTER_ALLOWED_ROOTS` is empty, NOVA discovers ready local drive roots and scopes operations to locations the current Windows account can actually access. Setting the variable explicitly narrows the scope to the listed folders.
-- Directory listing, filename search, content search for supported text formats, text reading, and opening a path resolve targets and verify containment inside the discovered roots. Symlinks and junctions are not followed during recursive search.
-- Text reading/content search supports a bounded set of text/code formats up to 2 MB per file; results are capped at 500. PDF/Office document extraction and a persistent Windows Search-backed index remain future work.
-- The desktop asks for confirmation before opening or reading a selected item and defaults to No. Search is read-only. The API rejects mutating/open/read actions without an explicit approval flag.
-- Action metadata is stored in the existing local SQLite database in a `computer_audit` table. File contents are not logged.
-- The desktop currently has deterministic request routing for direct app launches. A broader natural-language planner that can choose among discovery, search, open, read, and Windows settings tools is the next milestone; model output must never become executable authority.
+The computer integration is split between `src/nova/core/computer`, API routes under `src/nova/api`, and desktop approval UI.
 
-This is a local-user permission boundary, not a hardened multi-user security boundary. Keep the API bound to loopback; do not expose it to a network without adding authentication and a stronger authorization design.
+Implemented capabilities include:
 
+- Discovering installed applications and launching a selected match through Windows mechanisms.
+- Discovering or configuring accessible local roots; Windows permissions still apply.
+- Listing directories and searching supported filenames and document contents.
+- Reading or opening selected files with confirmation.
+- Read-only system, process, and visible-window inspection.
+- Focus, minimize, restore, maximize, and graceful close of a selected visible window.
+- Typed volume, supported brightness, and native Windows Search actions.
+- A limited Windows UI Automation adapter for supported accessible controls.
+- Optional battery and foreground-window awareness while the relevant panel is open.
+- A local audit trail for supported computer actions.
 
-## Natural-language computer planner
+A graceful close sends the normal Windows close message. It does not force-terminate an application; the application can prompt the user to save work.
 
-The first planner layer is deterministic and deliberately narrow. It recognizes filename searches, content searches, and explicit full-path open/read/list requests, then proposes typed actions to the desktop. It does not execute actions or treat model output as authority. The desktop shows a one-action confirmation before the API call; file contents remain local in the computer-controls panel. Filename search can scan all configured/accessibly discovered roots when no root is supplied. More conversational multi-step planning, Windows Search integration, OCR, and app/window automation remain later milestones.
+File search and reading are bounded. Inaccessible locations are skipped or rejected. The implementation does not bypass Windows ACLs, follow arbitrary links during recursive search, or promise OCR/semantic indexing for every file type. Document extraction depends on optional local libraries.
 
+UI Automation is constrained to enumerated visible controls. It is not arbitrary keyboard injection or a guarantee that every application's controls are accessible.
 
-## Windows OS awareness
+## Voice pipeline
 
-The first OS-introspection module is `src/nova/core/computer/windows.py`. It provides a read-only system overview, bounded process inventory via psutil, and visible top-level/foreground window metadata via the Windows user32 API. Process command lines and environment variables are intentionally excluded. API endpoints are `GET /computer/system`, `GET /computer/processes`, and `GET /computer/windows`. The desktop can also control a selected visible window through `POST /computer/windows/actions`: focus/switch, minimize, restore, or maximize. Every operation requires an explicit one-action approval. Closing windows and synthesizing keyboard/mouse input are intentionally not exposed in this milestone. The API validates that the target is still a visible top-level window and never elevates privileges. A deterministic desktop intent parser recognizes `switch to`, `focus on`, `bring up`, `minimize`, `restore`, and `maximize` requests, resolves them against visible window titles, and routes them through the same confirmation surface. Ambiguous title matches are presented for user selection.
+- Speech capture: `sounddevice` / PortAudio.
+- Offline recognition and wake phrase: Vosk.
+- Speech output: pyttsx3 using installed Windows voices.
+- The packaged Windows build includes the small English Vosk model.
+- Wake-word mode is opt-in; push-to-talk is available.
+- The desktop can interrupt current speech output when a wake-word interaction begins.
+- Microphone selection and test controls are exposed in desktop settings.
 
+Audio processing is local to the device. NOVA does not upload microphone audio to a cloud speech API.
 
-## Windows system controls, search, and opt-in events
+## Persistent storage and memory
 
-src/nova/core/computer/system_controls.py contains fixed, typed Windows operations for master volume (via the optional pycaw Core Audio adapter), supported internal-display brightness (via the Windows WMI brightness methods), and launching a native search-ms query. The API endpoints are POST /computer/system/volume, POST /computer/system/brightness, and POST /computer/windows/search. Every mutation requires an explicit approval field and is written to the local computer audit log. There is no generic command or PowerShell endpoint. Brightness support varies by device; external monitors are commonly unsupported. Windows Search is opened in the native shell rather than scraped or queried outside its own index permissions.
+The local SQLite store contains conversation records, messages, long-term memories, retrieval metadata, and related local state.
 
-A deterministic planner recognizes numeric volume/brightness requests and bounded Windows Search phrases. The desktop displays a confirmation before invoking the typed endpoint. The optional active-app watcher is user-started, polls only the foreground window title every two seconds while the Computer Controls dialog is open, and stops when the dialog closes. It does not persist titles, capture screen contents, or add window context to AI prompts. It is intentionally off by default.
+Memory capabilities include:
 
-The optional windows dependency group installs pycaw for master audio control. Core APIs remain importable without that optional package; attempting audio adjustment without it returns an actionable setup error.
+- Explicit remember requests and selected low-risk automatic captures.
+- Pending review for selected sensitive or high-impact suggestions.
+- Rejection of credential-like content.
+- Local feature-hash vector representation and cosine similarity retrieval.
+- Hybrid semantic/lexical ranking.
+- Pinned-memory prioritisation.
+- Duplicate and near-duplicate prevention.
+- Access counts and last-access timestamps.
+- Search, list, approve, edit, pin, and delete operations.
 
+This is a lightweight local retrieval system, not a transformer embedding service. It does not require a hosted embedding endpoint or separate vector database. Memory content is contextual data, not executable instructions.
 
-## Application UI Automation boundary
+Conversation history supports search across title and message text, open/resume, rename, pin/unpin, and delete. The pin column is added through an additive SQLite migration so existing databases can be upgraded without discarding prior records.
 
-The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attaches to an existing visible top-level window by its enumerated HWND. It exposes only enabled, visible Button, TabItem, MenuItem, Hyperlink, CheckBox, and RadioButton controls with accessible names. Activation requires an exact name and control type that resolve to exactly one current control, plus explicit desktop/API approval. It does not send arbitrary keystrokes, read password fields, execute scripts, or operate on unlisted windows. A separate approved operation can enter up to 2,000 characters into one uniquely named visible, enabled, non-password Edit control. UI Automation availability depends on the target application's accessibility tree; some apps expose incomplete controls.
+## Scheduler and system monitoring
 
+The scheduler persists jobs and execution history in SQLite. Current scheduled handlers are read-only system and storage reports. Jobs begin pending approval; supported recurrence includes once, daily, and weekly. Users can approve, pause, cancel, and inspect history.
 
-## Windows shell integration and event-driven workflows
+The system-state monitor collects bounded local telemetry and can emit rate-limited alerts for sustained resource conditions. It is observational: it does not kill processes or silently modify system settings.
 
-The PySide6 desktop registers a Windows notification-area icon, hides to the tray on close, and exits only through the tray Quit command. Ctrl+Alt+Space is registered through RegisterHotKey (no global keyboard hook); it brings NOVA forward. A current-user startup option writes only the NOVA value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run and can be removed from the same menu. Native toast notifications use the optional winotify adapter. Reply notifications are off by default; the user must explicitly enable them from the tray menu. That preference is stored in the user's local preferences.json. A one-off test toast is available.
+Native Windows notifications are optional and user-controlled. NOVA can display its own notifications but does not read notifications from other applications.
 
-Computer Controls provides opt-in battery and power-state monitoring. It polls psutil battery telemetry once per minute only while the dialog is open; it reports plug/unplug changes and one low-battery alert per low-battery episode. This is not a general Windows event subscription and it does not inspect notifications belonging to other applications.
+## Data locations on Windows
 
-A bounded multi-step planner accepts up to five `then`-chained system/window actions. The entire chain is validated before execution, then each step requires its own confirmation. A cancelled, failed, or unresolved step halts the chain. Unsupported steps invalidate the plan; model-generated text is never executed as code.
+- User settings: `%APPDATA%\NOVA\.env`
+- User preferences: `%APPDATA%\NOVA\preferences.json`
+- Local database: `%LOCALAPPDATA%\NOVA\nova_memory.sqlite3`
+- Installed program: `%LOCALAPPDATA%\Programs\NOVA`
 
-UI Automation supports exact-name activation of a small set of visible controls and, separately, text entry into one uniquely named visible enabled non-password Edit control. Text entry is limited to 2,000 characters, requires explicit approval, and the text itself is omitted from audit parameters. Password fields and arbitrary keyboard injection are excluded.
+The installer keeps user data outside the application directory and is designed to preserve settings and SQLite data during upgrades.
 
+## Security and trust boundaries
 
-## Desktop-managed backend lifecycle
+- Keep the local API bound to loopback.
+- Store credentials in private per-user configuration; do not commit them.
+- Model output is untrusted and must pass schema validation.
+- Tool execution requires explicit user approval.
+- Each tool has a finite contract; no arbitrary shell or generated-code execution is exposed.
+- Computer actions are scoped, confirmed, and audited where applicable.
+- The app runs with the signed-in user's permissions and does not request administrator elevation as part of normal operation.
+- Simulation results are labelled and must never be represented as physical actions.
+- The application does not silently capture screen, camera, or third-party notification content.
 
-When the desktop starts, it probes the configured local API health endpoint. If no healthy API is present and NOVA_API_URL matches the configured loopback host/port, the desktop starts `python -m nova.service` as a child process with no console window (or starts the packaged executable in `--nova-backend` mode). It never auto-starts a backend on a non-loopback bind address or silently redirects a custom NOVA_API_URL. The desktop passes its PID and process creation time to the child; a watchdog makes the API exit if the owning desktop process disappears, preventing orphaned backends after a crash. On explicit Quit, the desktop terminates only the child process it owns; it does not stop a backend that was already running.
+This is a single-user local desktop architecture, not a hardened multi-user remote service. Do not expose the API to a LAN or public network without authentication, authorization, and a separate threat review.
 
+## Development and testing
 
-## Per-user installation and configuration
+Install the development extras on Windows:
 
-The Windows distribution uses PyInstaller onedir plus an Inno Setup per-user installer. It installs without elevation under %LOCALAPPDATA%\Programs\NOVA. The current-user settings file is %APPDATA%\NOVA\.env and persistent SQLite memory is %LOCALAPPDATA%\NOVA\nova_memory.sqlite3. The installer copies the example config only if no user config exists, so upgrades preserve user preferences and memory. A QLockFile in the user profile prevents multiple desktop instances.
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev,desktop,voice,windows,documents]"
+pytest
+```
 
-The desktop runs in the signed-in interactive session rather than as a LocalSystem service. This is required for correct access to foreground windows, UI Automation and the user's notification experience. It can start hidden at sign-in, minimize to the tray, and be reopened with Ctrl+Alt+Space. The user can explicitly quit it from the tray; this stops the owned API child. Startup registration writes only the current user's Run key.
-
-## Shared automation engine
-
-The AutomationEngine maintains a finite registry of typed action contracts and exposes it at GET /computer/automation/capabilities. The desktop validates complete multi-step plans against that registry before displaying individual confirmations. Plans are limited to five steps, reject unknown actions and malformed payloads, and stop after the first cancelled or failed step. API endpoints independently validate approval flags and operation-specific parameters.
-
-## Windows notification capability boundary
-
-NOVA can display its own toast notifications through the current user's Windows notification system. It does not read other applications' notifications. The Windows UserNotificationListener API requires an MSIX package identity, the restricted userNotificationListener capability, and explicit user consent. The current Inno Setup installer does not declare that capability. A future MSIX distribution and permission flow is required before cross-app notification reading can be implemented honestly and tested.
+The GitHub Actions workflows run automated tests and package the Windows application. The installed application is the intended end-user path; manual Python commands are for contributors.

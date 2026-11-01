@@ -1,56 +1,56 @@
-# NOVA 3.0 Runtime Architecture
+# NOVA runtime architecture
 
-This document describes the first runtime foundation milestone. It is deliberately
-incremental: existing FastAPI, PySide6, local model, memory, voice, task scheduler,
-and permissioned Windows controls remain in place.
+This document describes the runtime services currently present in NOVA. The “NOVA 3.0” title refers to a longer-term architecture direction, not a claim that the product has reached a 3.0 release.
 
 ## Runtime services
 
-- `SystemStateMonitor` runs as an asyncio background task in the FastAPI lifespan.
-- Telemetry sampling is offloaded with `asyncio.to_thread` so process inspection
-  does not block the API event loop.
-- The monitor records CPU, RAM commitment, network byte counters and throughput,
-  foreground-window title (Windows), process count, and the top eight processes
-  by resident memory.
-- A bounded alert history reports sustained high CPU or memory use. Alerts are
-  rate-limited and observational only; the monitor does not kill processes,
-  change power settings, or run maintenance autonomously.
+The FastAPI application owns the backend lifespan. Runtime services are started and stopped with that application.
 
-## Persona
+### System state monitor
 
-The chat endpoint prepends a single system identity prompt. It sets concise,
-composed British-style language and prohibits false claims about simulated or
-physical actions. Existing retrieved memories remain separate context and never
-override system policy.
+- Samples local CPU, memory, network, foreground-window, and process information.
+- Uses background/thread offloading for operations that should not block the API event loop.
+- Keeps bounded recent telemetry and alert history.
+- Can report sustained high CPU or memory conditions.
+- Alerts are rate-limited and observational only.
+- It does not kill processes, modify power settings, or perform unapproved maintenance.
+
+The monitor runs locally. Telemetry is not a remote monitoring service.
+
+## Assistant persona and chat
+
+The chat endpoint applies a system identity and safety policy before calling the configured provider. Retrieved memories are supplied as bounded context and cannot override system policy.
+
+The provider layer supports echo/setup mode and an OpenAI-compatible chat-completions adapter. NOVA does not bundle a foundation model; model inference occurs in the configured local runtime or compatible hosted service.
 
 ## Tool runtime
 
-- Tools have explicit names, descriptions, JSON-like argument schemas, and
-  registered handlers.
-- A chain is limited to five calls and is fully validated before the first call.
-- Execution requires an explicit `approved: true` request.
-- No shell, eval, generated Python, arbitrary file writes, or arbitrary process
-  execution is exposed by this registry.
-- Aerospace, smart-grid, thermal, and holographic subsystems are in-memory
-  simulations. Every result is labelled `SIMULATION ONLY`.
+- Tools have explicit names, descriptions, argument schemas, and registered handlers.
+- Chains are limited to five calls.
+- The entire chain is validated before execution.
+- Execution requires explicit approval.
+- Failed steps stop the chain and later steps are skipped.
+- Partial results are preserved for accurate explanation.
+- No arbitrary shell, eval, generated Python, arbitrary file writes, or arbitrary process execution is exposed through the model tool registry.
+- Simulation-only tools are labelled and do not operate physical hardware.
 
-## API
+The desktop displays a confirmation surface before the registered tool chain is executed. Model-generated content is never treated as executable authority.
 
-- `GET /runtime/state` — latest telemetry and recent alerts.
+## API surface
+
+- `GET /runtime/state` — latest system telemetry and recent alerts.
 - `GET /runtime/tools` — registered tool descriptions.
-- `POST /runtime/tools/execute` — bounded, approved tool chain.
+- `POST /runtime/tools/plan` — propose a structured tool chain.
+- `POST /runtime/tools/execute` — execute an approved, validated chain.
 
-## Next integration milestones
+Other API routers provide chat, conversations, memory, tasks, and Windows computer operations.
 
-1. Connect runtime state to the PySide6 command-centre UI.
-2. Add persistent, user-configurable alert policies and notification controls.
-3. Add interruptible async voice sessions and wake-word support.
-4. Add opt-in screen capture/OCR with a visible capture indicator and local
-   processing by default.
-5. Add model-compatible function calling only when the configured provider
-   advertises and passes a capability check.
-6. Add additional Windows actions as typed, individually permissioned tools.
+## Implemented integrations
 
-The runtime currently supplies an API-level tool registry; it does not yet let
-the LLM autonomously execute tool chains. That integration must preserve the
-approval and validation rules above.
+The runtime is integrated with the desktop's model-guided tool approval flow, local SQLite memory, the scheduler, system-state alerts, optional Windows notifications, and the typed Computer Controls APIs.
+
+The desktop also supports local wake-word voice sessions, push-to-talk, and interruptible speech playback. These are implemented user-facing features, not merely API stubs.
+
+## Future work
+
+Potential future work includes more persistent user-configurable alert policies, richer status dashboards, opt-in local screen understanding, additional typed Windows actions, and provider capability negotiation. These are not claims about current functionality. Any future capture or automation feature must preserve visible controls, explicit consent, narrow permissions, and local processing where practical.

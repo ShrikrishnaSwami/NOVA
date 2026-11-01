@@ -1,59 +1,54 @@
-# NOVA model tools and hands-free voice
+# NOVA model tools and voice
+
+This document covers the current tool-planning and voice implementation. For the broader component map, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Model-guided tool planning
 
-NOVA now has a model-guided planning primitive at `nova.core.runtime.agent.propose_tools`.
-It asks the configured OpenAI-compatible model for a JSON proposal, then validates every
-tool name and argument against the live `ToolRegistry` schema.
+NOVA can ask the configured OpenAI-compatible model to propose structured tool calls. The proposal is validated against the live registered tool schemas before the desktop offers it for approval.
 
-The planner never executes a tool. The runtime API exposes:
+Runtime endpoints:
 
 - `GET /runtime/tools` — registered tool inventory.
-- `POST /runtime/tools/plan` — request a model-generated proposal using
-  `{"message":"..."}`.
-- `POST /runtime/tools/execute` — execute a validated chain only when
-  `approved: true` is supplied.
+- `POST /runtime/tools/plan` — request a proposal with a message.
+- `POST /runtime/tools/execute` — execute a validated chain only when `approved: true` is supplied.
 
-A chain is limited to five calls. The registry validates the entire chain before
-running the first handler. Unknown tool names, extra arguments, missing required
-arguments, invalid enum values, and incompatible primitive types are rejected.
-The default registry now includes real read-only tools for system overview,
-visible process inventory, foreground-window details, and visible windows, as
-well as simulated aerospace, smart-grid, thermal, and holographic subsystems.
-The simulations do not control physical hardware. The current model registry
-does not yet expose mutating Windows actions; those remain on the existing
-permission-scoped Computer Controls path.
+The desktop chat flow requests a plan, displays the proposed operations and arguments, and requires the user to approve before execution. If planning fails or no tools are proposed, ordinary chat remains available. Actual tool results are sent back to the model so NOVA can describe the outcome rather than assume success.
 
-The desktop chat now requests a model plan before ordinary chat, displays a
-confirmation dialog when tools are proposed, executes only after approval, and
-sends the actual tool results back to the model for a final response. If planning
-fails or the model returns no tools, NOVA falls back to ordinary chat. Model-
-generated plans remain untrusted until reviewed by the user. Qwen3 models served
-through Bionic may vary in JSON reliability; invalid output fails closed.
+### Validation and execution rules
 
-## Local wake-word session
+- Maximum of five tool calls in a chain.
+- The entire chain is validated before any handler runs.
+- Only registered tool names and declared arguments are accepted.
+- Unknown tools, malformed arguments, and invalid types fail closed.
+- Each handler must return the expected structured result.
+- Execution stops on the first failed step; later steps are marked skipped.
+- Partial results are preserved so the assistant can accurately report what completed.
+- Explicit approval is required; model text cannot approve its own proposal.
 
-`nova.core.voice.WakeWordSession` provides a continuous local Vosk listener.
-It uses a constrained wake grammar (default: `hey nova`), switches to a general
-Vosk recognizer after activation, emits one utterance, and returns to wake-word
-standby. Audio remains on the local machine.
+The registry includes read-only system and visible-window tools. Some example subsystem tools are simulations and are labelled as such. They do not control physical aerospace, energy, thermal, or holographic hardware.
 
-The session accepts callbacks for wake detection, recognized utterances, and
-errors. The wake callback is the intended hook for interrupting speech playback.
+Mutating Windows actions use separate typed computer-control APIs and desktop confirmation dialogs. NOVA does not provide arbitrary shell execution, arbitrary Python execution, eval, or unrestricted process termination.
 
-This is currently a reusable engine component, not yet connected to the desktop
-window's voice controls. The existing desktop push-to-talk and read-last-reply
-features remain unchanged. A complete interruptible desktop voice experience
-still requires lifecycle/UI integration, playback cancellation, visible
-microphone state, and end-to-end Windows testing.
+## Local voice
 
-## Safety and privacy
+The Windows desktop supports local voice input and output:
 
-- No audio upload or cloud speech service is used by this component.
-- The microphone remains active while the wake session is running; the desktop
-  must visibly indicate this and provide an immediate stop control before it is
-  enabled by default.
-- Wake-word activation is opt-in; push-to-talk remains available.
-- Tool proposals never execute automatically.
-- Tool handlers remain constrained by the registry; arbitrary shell, code
-  execution, and unrestricted desktop actions are not exposed.
+- **Input capture:** sounddevice / PortAudio.
+- **Speech recognition:** Vosk offline model.
+- **Wake phrase:** constrained local grammar, default phrase “Hey NOVA”.
+- **Speech output:** pyttsx3 using installed Windows SAPI voices.
+- **Playback interruption:** an active speech response can be stopped when a new wake-word interaction starts.
+- **Fallback:** push-to-talk remains available.
+
+The installed Windows build bundles `vosk-model-small-en-us-0.15`. Microphone selection and a microphone test are available in desktop settings. Wake-word standby is opt-in and can be disabled from the UI/settings. The microphone remains active while wake-word mode is enabled, so use the visible desktop controls to stop it when not needed.
+
+NOVA processes microphone audio locally and does not send it to a cloud speech-recognition service.
+
+## Privacy and safety
+
+- Tool proposals are never executed solely because the model requested them.
+- Tool handlers remain limited to registered contracts.
+- Wake-word listening is not enabled by default.
+- The app must make microphone state controllable by the user.
+- Voice features do not grant extra computer permissions.
+- Arbitrary shell commands, generated scripts, and unrestricted desktop actions are not exposed.
