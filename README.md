@@ -109,6 +109,10 @@ Useful endpoints:
 - `GET /conversations` and `GET /conversations/{id}` — browse saved conversations.
 - `DELETE /conversations/{id}` — delete a conversation and its messages.
 
+## Local model benchmarking
+
+See [docs/LOCAL_MODEL_BENCHMARK.md](docs/LOCAL_MODEL_BENCHMARK.md) for a repeatable benchmark of models exposed by your local runtime. It measures median TTFT and total response time without sending prompts to a cloud service or changing NOVA's configuration.
+
 ## Tests
 
 ```powershell
