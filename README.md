@@ -108,6 +108,18 @@ You can also use the backend without the desktop client:
 - API docs: http://127.0.0.1:8000/docs
 - AI status: http://127.0.0.1:8000/system/ai
 
+
+## Scheduled tasks (NOVA 2.0 foundation)
+
+NOVA now has a persistent local scheduler with approval, once/daily/weekly recurrence, pause/cancel controls, and execution history. Its first registered tasks are read-only system and storage reports. Every task begins in a pending-approval state; only the exact approved task can run. The scheduler does not execute arbitrary commands or model-generated scripts. See [docs/TASK_SCHEDULER.md](docs/TASK_SCHEDULER.md) for endpoints, examples, and the current security boundary.
+
+Useful endpoints:
+- `GET /tasks/capabilities` — inspect registered task actions.
+- `POST /tasks` — create a task awaiting approval.
+- `GET /tasks` — list scheduled tasks.
+- `POST /tasks/{id}/approve`, `/pause`, and `/cancel` — manage a task.
+- `GET /tasks/{id}/history` — inspect its execution history.
+
 ## Local voice (optional)
 
 NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice,windows]"`.
