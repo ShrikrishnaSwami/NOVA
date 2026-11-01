@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 from datetime import datetime, timezone
@@ -88,9 +89,9 @@ def _installed_registry_apps() -> list[dict[str, str]]:
 
     results: dict[str, dict[str, str]] = {}
     uninstall_roots = (
-        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
     )
     for hive, subkey in uninstall_roots:
         try:
@@ -105,7 +106,7 @@ def _installed_registry_apps() -> list[dict[str, str]]:
                         if not name or not icon:
                             continue
                         # DisplayIcon can end with an icon resource index, e.g. app.exe,0.
-                        icon = re.sub(r",\\s*-?\\d+\\s*$", "", icon).strip().strip('"')
+                        icon = re.sub(r",\s*-?\d+\s*$", "", icon).strip().strip('"')
                         executable = Path(os.path.expandvars(icon))
                         if executable.is_file() and executable.suffix.lower() == ".exe":
                             key = str(executable.resolve()).casefold()
@@ -116,8 +117,8 @@ def _installed_registry_apps() -> list[dict[str, str]]:
             continue
 
     app_path_roots = (
-        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\\Windows\\CurrentVersion\\App Paths"),
     )
     for hive, subkey in app_path_roots:
         try:
