@@ -14,6 +14,7 @@ The project is in active early development. The current release includes a local
 - Echo setup mode that works without model credentials.
 - OpenAI-compatible adapter for local model servers and compatible hosted APIs.
 - Optional PySide6 desktop client with animated NOVA visual, chat, and backend/model status.
+- Optional local push-to-talk speech recognition and operating-system text-to-speech.
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
@@ -86,6 +87,10 @@ You can also use the backend without the desktop client:
 - Health: http://127.0.0.1:8000/health
 - API docs: http://127.0.0.1:8000/docs
 - AI status: http://127.0.0.1:8000/system/ai
+
+## Local voice (optional)
+
+NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice]"`.
 
 ## Persistent memory
 
