@@ -1,4 +1,4 @@
-from nova.core.computer.intents import match_open_application_command
+from nova.core.computer.intents import match_open_application_command, requested_application_name
 
 
 APPS = [
@@ -9,17 +9,27 @@ APPS = [
 ]
 
 
-def test_match_discovered_app_names() -> None:
-    assert match_open_application_command("Open Spotify", APPS) == APPS[0]
+def test_match_conversational_app_launch_requests() -> None:
+    for phrase in (
+        "Open Outlook",
+        "Please open Outlook!",
+        "Can you open Outlook?",
+        "Could you please open Outlook for me?",
+        "Hey NOVA, launch Outlook please",
+        "I want you to open Outlook",
+        "I'd like you to start Outlook",
+    ):
+        assert match_open_application_command(phrase, APPS) == APPS[2]
+
     assert match_open_application_command("launch Google Chrome", APPS) == APPS[1]
-    assert match_open_application_command("open Outlook", APPS) == APPS[2]
-    assert match_open_application_command("Please open Outlook!", APPS) == APPS[2]
     assert match_open_application_command("Open Settings", APPS) == APPS[3]
 
 
-def test_do_not_match_unknown_or_ambiguous_apps() -> None:
+def test_reject_unknown_ambiguous_and_non_launch_requests() -> None:
     assert match_open_application_command("What is Spotify?", APPS) is None
     assert match_open_application_command("Open PowerShell", APPS) is None
-    duplicate = APPS + [{"name": "Spotify", "app_id": "another-id"}]
-    assert match_open_application_command("Open Spotify", duplicate) is None
     assert match_open_application_command("Open Spotify and delete files", APPS) is None
+    assert requested_application_name("Tell me about Outlook") is None
+
+    duplicate = APPS + [{"name": "Outlook classic", "app_id": "classic-outlook"}]
+    assert match_open_application_command("Open Outlook", duplicate) is None
