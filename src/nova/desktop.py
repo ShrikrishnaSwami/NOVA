@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+from pathlib import Path
 from uuid import uuid4
 from typing import Any
 
@@ -14,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QCheckBox,
     QInputDialog,
     QListWidget,
     QListWidgetItem,
@@ -86,6 +89,86 @@ class ApiWorker(QThread):
         except Exception as exc:
             self.failed.emit(str(exc))
 
+
+class VoiceInputWorker(QThread):
+    """One-shot, local push-to-talk transcription using Vosk."""
+
+    recognized = Signal(str)
+    failed = Signal(str)
+    listening = Signal(str)
+
+    def __init__(self, model_path: str) -> None:
+        super().__init__()
+        self.model_path = Path(model_path).expanduser()
+        self._stop_requested = threading.Event()
+
+    def stop(self) -> None:
+        self._stop_requested.set()
+
+    def run(self) -> None:
+        try:
+            import sounddevice as sd
+            from vosk import KaldiRecognizer, Model
+
+            if not self.model_path.is_dir():
+                raise RuntimeError(
+                    "Vosk model not found. Download and extract an English Vosk model, "
+                    "then set NOVA_VOSK_MODEL_PATH to its folder."
+                )
+
+            model = Model(str(self.model_path))
+            recognizer = KaldiRecognizer(model, 16000)
+            self.listening.emit("Listening locally… speak now.")
+            with sd.RawInputStream(
+                samplerate=16000,
+                blocksize=8000,
+                dtype="int16",
+                channels=1,
+            ) as stream:
+                while not self._stop_requested.is_set():
+                    audio, overflowed = stream.read(4000)
+                    if overflowed:
+                        continue
+                    if recognizer.AcceptWaveform(bytes(audio)):
+                        result = json.loads(recognizer.Result())
+                        phrase = str(result.get("text", "")).strip()
+                        if phrase:
+                            self.recognized.emit(phrase)
+                            return
+
+            final_result = json.loads(recognizer.FinalResult())
+            phrase = str(final_result.get("text", "")).strip()
+            if phrase:
+                self.recognized.emit(phrase)
+            else:
+                self.failed.emit("No speech was recognized. Try again.")
+        except Exception as exc:
+            self.failed.emit(
+                f"Voice input unavailable: {exc}. Check microphone permission and voice setup."
+            )
+
+
+class SpeechOutputWorker(QThread):
+    """Speak text through the operating system's installed local TTS voices."""
+
+    failed = Signal(str)
+
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.text = text
+
+    def run(self) -> None:
+        try:
+            import pyttsx3
+
+            engine = pyttsx3.init()
+            engine.say(self.text)
+            engine.runAndWait()
+            engine.stop()
+        except Exception as exc:
+            self.failed.emit(f"Speech output unavailable: {exc}")
+
+
 class NovaOrb(QWidget):
     """Simple animated identity visual; deliberately lightweight for integrated GPUs."""
 
@@ -151,6 +234,9 @@ class NovaWindow(QMainWindow):
         self.worker: ApiWorker | None = None
         self._last_response_status: str | None = None
         self._stream_buffer = ""
+        self.last_response_text = ""
+        self.voice_worker: VoiceInputWorker | None = None
+        self.speech_worker: SpeechOutputWorker | None = None
         self._stream_flush_timer = QTimer(self)
         self._stream_flush_timer.setInterval(40)
         self._stream_flush_timer.timeout.connect(self._flush_stream_tokens)
@@ -287,6 +373,16 @@ class NovaWindow(QMainWindow):
         self.send_button.setObjectName("sendButton")
         self.send_button.clicked.connect(self._send_message)
         composer_layout.addWidget(self.send_button)
+        self.voice_button = QPushButton("🎙  Talk")
+        self.voice_button.setObjectName("newChat")
+        self.voice_button.setToolTip("Start local push-to-talk transcription")
+        self.voice_button.clicked.connect(self._toggle_voice_input)
+        composer_layout.addWidget(self.voice_button)
+        self.speak_button = QPushButton("🔊  Read last reply")
+        self.speak_button.setObjectName("newChat")
+        self.speak_button.setToolTip("Read NOVA's latest response using a local Windows voice")
+        self.speak_button.clicked.connect(self._speak_last_response)
+        composer_layout.addWidget(self.speak_button)
         main_layout.addWidget(composer)
 
         hint = QLabel("Enter to send  ·  Conversations and approved memories are stored locally on this device.")
@@ -394,6 +490,7 @@ class NovaWindow(QMainWindow):
             reply = str(data.get("reply", "The model returned an empty response."))
             self.streaming_body.setText(reply)
         self.history.append({"role": "assistant", "content": reply})
+        self.last_response_text = reply
         self.model_badge.setText(f"MODEL  •  {data.get('model', 'CONNECTED')}")
         ttft, total = data.get("ttft_ms"), data.get("total_ms")
         memory = data.get("memory")
@@ -423,6 +520,51 @@ class NovaWindow(QMainWindow):
         self.send_button.setEnabled(True)
         self.send_button.setText("Send  ↗")
         self.input.setFocus()
+
+    def _toggle_voice_input(self) -> None:
+        if self.voice_worker and self.voice_worker.isRunning():
+            self.voice_worker.stop()
+            self.voice_button.setText("🎙  Talk")
+            self.connection_label.setText("Stopping microphone…")
+            return
+
+        model_path = os.getenv("NOVA_VOSK_MODEL_PATH", "").strip()
+        if not model_path:
+            QMessageBox.information(
+                self,
+                "Set up local voice input",
+                "Download and extract a Vosk English model, then set "
+                "NOVA_VOSK_MODEL_PATH to that folder. See docs/VOICE_SETUP.md.",
+            )
+            return
+
+        self.voice_worker = VoiceInputWorker(model_path)
+        self.voice_worker.listening.connect(self.connection_label.setText)
+        self.voice_worker.recognized.connect(self._voice_recognized)
+        self.voice_worker.failed.connect(self._voice_failed)
+        self.voice_worker.finished.connect(lambda: self.voice_button.setText("🎙  Talk"))
+        self.voice_button.setText("■  Stop listening")
+        self.voice_worker.start()
+
+    def _voice_recognized(self, phrase: str) -> None:
+        self.input.setText(phrase)
+        self.connection_label.setText("Voice transcribed locally. Sending to NOVA…")
+        self._send_message()
+
+    def _voice_failed(self, message: str) -> None:
+        self.connection_label.setText(message)
+        QMessageBox.warning(self, "Voice input", message)
+
+    def _speak_last_response(self) -> None:
+        if not self.last_response_text.strip():
+            QMessageBox.information(self, "Nothing to read", "NOVA has not produced a response yet.")
+            return
+        if self.speech_worker and self.speech_worker.isRunning():
+            QMessageBox.information(self, "Speech in progress", "NOVA is already speaking.")
+            return
+        self.speech_worker = SpeechOutputWorker(self.last_response_text)
+        self.speech_worker.failed.connect(self.connection_label.setText)
+        self.speech_worker.start()
 
     def _check_status(self) -> None:
         if self.worker and self.worker.isRunning():
