@@ -21,7 +21,7 @@ def test_process_inventory_has_bounded_limit() -> None:
     try:
         result = windows.list_processes(1)
     except RuntimeError as exc:
-        assert "windows extra" in str(exc)
+        assert "psutil dependency" in str(exc)
     else:
         assert len(result) <= 1
         for process in result:
