@@ -51,6 +51,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_pinned_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    """Expose SQLite integer flags as real Python booleans."""
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        if "pinned" in item:
+            item["pinned"] = bool(item["pinned"])
+        normalized.append(item)
+    return normalized
+
+
 def _vector(text: str) -> list[float]:
     """Create a normalized 256-dimensional local feature-hash vector."""
     words = [w.lower() for w in _WORDS.findall(text) if w.lower() not in _STOPWORDS]
@@ -263,7 +274,7 @@ class MemoryStore:
                 "last_accessed_at, access_count, pinned FROM memories" + where +
                 " ORDER BY pinned DESC, updated_at DESC", params,
             ).fetchall()
-        return [dict(row) for row in rows]
+        return _normalize_pinned_rows(rows)
 
     def memory_stats(self) -> dict[str, Any]:
         with self._connect() as db:
@@ -331,7 +342,7 @@ class MemoryStore:
                 "ORDER BY pinned DESC, updated_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return _normalize_pinned_rows(rows)
 
     def search_conversations(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
         """Search conversation titles and message text, returning newest matches."""
@@ -348,7 +359,7 @@ class MemoryStore:
                    ORDER BY c.pinned DESC, c.updated_at DESC LIMIT ?""",
                 (pattern, pattern, limit),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return _normalize_pinned_rows(rows)
 
     def rename_conversation(self, conversation_id: str, title: str) -> bool:
         normalized = " ".join(title.split())[:100]
