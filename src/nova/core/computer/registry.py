@@ -80,7 +80,7 @@ def _registered_start_apps() -> list[dict[str, str]]:
 
 
 def _installed_registry_apps() -> list[dict[str, str]]:
-    """Discover classic desktop apps from Windows uninstall and App Paths registry keys."""
+    """Discover classic desktop apps using uninstall metadata and App Paths."""
     if os.name != "nt":
         return []
     try:
@@ -89,6 +89,50 @@ def _installed_registry_apps() -> list[dict[str, str]]:
         return []
 
     results: dict[str, dict[str, str]] = {}
+
+    def add_executable(name: str, raw_path: str) -> None:
+        raw_path = os.path.expandvars(raw_path.strip().strip('"'))
+        match = re.search(r'(?i)(.*?\.exe)(?:\s*,\s*-?\d+)?$', raw_path)
+        if not match:
+            return
+        executable = Path(match.group(1).strip().strip('"'))
+        try:
+            if executable.is_file() and executable.suffix.lower() == ".exe":
+                resolved = str(executable.resolve())
+                results.setdefault(resolved.casefold(), {
+                    "name": name.strip() or executable.stem,
+                    "app_id": "exe:" + resolved,
+                })
+        except (OSError, RuntimeError):
+            return
+
+    def add_install_location(name: str, raw_location: str) -> None:
+        if not raw_location:
+            return
+        location = Path(os.path.expandvars(raw_location.strip().strip('"')))
+        if not location.is_dir():
+            return
+        candidates: list[Path] = []
+        try:
+            candidates.extend(p for p in location.iterdir() if p.is_file() and p.suffix.lower() == ".exe")
+            for child_name in ("bin", "app", "current"):
+                child = location / child_name
+                if child.is_dir():
+                    candidates.extend(p for p in child.iterdir() if p.is_file() and p.suffix.lower() == ".exe")
+        except OSError:
+            return
+        excluded = ("uninstall", "update", "setup", "install", "crash", "helper", "repair")
+        candidates = [p for p in candidates if not any(word in p.stem.casefold() for word in excluded)]
+        if not candidates:
+            return
+        normalized_name = re.sub(r"[^a-z0-9]", "", name.casefold())
+        candidates.sort(key=lambda p: (
+            0 if re.sub(r"[^a-z0-9]", "", p.stem.casefold()) == normalized_name else 1,
+            len(p.name),
+            p.name.casefold(),
+        ))
+        add_executable(name, str(candidates[0]))
+
     uninstall_roots = (
         (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
         (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
@@ -102,16 +146,21 @@ def _installed_registry_apps() -> list[dict[str, str]]:
                     try:
                         child_name = winreg.EnumKey(root, index)
                         with winreg.OpenKey(root, child_name) as entry:
-                            name = str(winreg.QueryValueEx(entry, "DisplayName")[0]).strip()
-                            icon = str(winreg.QueryValueEx(entry, "DisplayIcon")[0]).strip().strip('"')
-                        if not name or not icon:
+                            values = {}
+                            for value_name in ("DisplayName", "DisplayIcon", "InstallLocation", "SystemComponent", "ParentKeyName"):
+                                try:
+                                    values[value_name] = winreg.QueryValueEx(entry, value_name)[0]
+                                except OSError:
+                                    pass
+                        name = str(values.get("DisplayName", "")).strip()
+                        if not name or values.get("SystemComponent") == 1 or values.get("ParentKeyName"):
                             continue
-                        # DisplayIcon can end with an icon resource index, e.g. app.exe,0.
-                        icon = re.sub(r",\s*-?\d+\s*$", "", icon).strip().strip('"')
-                        executable = Path(os.path.expandvars(icon))
-                        if executable.is_file() and executable.suffix.lower() == ".exe":
-                            key = str(executable.resolve()).casefold()
-                            results.setdefault(key, {"name": name, "app_id": "exe:" + str(executable.resolve())})
+                        before = len(results)
+                        icon = str(values.get("DisplayIcon", ""))
+                        if icon:
+                            add_executable(name, icon)
+                        if len(results) == before:
+                            add_install_location(name, str(values.get("InstallLocation", "")))
                     except (OSError, ValueError, TypeError):
                         continue
         except OSError:
@@ -121,28 +170,23 @@ def _installed_registry_apps() -> list[dict[str, str]]:
         (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\App Paths"),
         (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\App Paths"),
     )
+    views = {0, getattr(winreg, "KEY_WOW64_32KEY", 0)}
     for hive, subkey in app_path_roots:
-        try:
-            with winreg.OpenKey(hive, subkey) as root:
-                count = winreg.QueryInfoKey(root)[0]
-                for index in range(count):
-                    try:
-                        child_name = winreg.EnumKey(root, index)
-                        with winreg.OpenKey(root, child_name) as entry:
-                            raw_path = str(winreg.QueryValueEx(entry, "")[0]).strip().strip('"')
-                        executable = Path(os.path.expandvars(raw_path))
-                        if executable.is_file() and executable.suffix.lower() == ".exe":
-                            key = str(executable.resolve()).casefold()
-                            results.setdefault(key, {
-                                "name": Path(child_name).stem,
-                                "app_id": "exe:" + str(executable.resolve()),
-                            })
-                    except (OSError, ValueError, TypeError):
-                        continue
-        except OSError:
-            continue
+        for view in views:
+            try:
+                with winreg.OpenKey(hive, subkey, 0, winreg.KEY_READ | view) as root:
+                    count = winreg.QueryInfoKey(root)[0]
+                    for index in range(count):
+                        try:
+                            child_name = winreg.EnumKey(root, index)
+                            with winreg.OpenKey(root, child_name) as entry:
+                                raw_path = str(winreg.QueryValueEx(entry, "")[0])
+                            add_executable(Path(child_name).stem, raw_path)
+                        except (OSError, ValueError, TypeError):
+                            continue
+            except OSError:
+                continue
     return list(results.values())
-
 
 def _accessible_computer_roots() -> list[Path]:
     """Return ready local drive roots on Windows, or the user home elsewhere."""
@@ -307,25 +351,23 @@ class ComputerToolRegistry:
                 if selected is None:
                     raise ComputerToolError("That application is no longer in the current installed-app catalogue. Refresh the app list and try again.")
                 app = selected["name"]
+                if os.name != "nt" or not hasattr(os, "startfile"):
+                    raise ComputerToolError("Windows application launching is only available on Windows.")
                 if app_id == _WINDOWS_SETTINGS_ID:
-                    subprocess.Popen(["explorer.exe", "ms-settings:"], shell=False, close_fds=True)
+                    os.startfile("ms-settings:")
                 elif app_id.startswith("exe:"):
                     executable = Path(app_id.removeprefix("exe:")).resolve(strict=True)
                     if not executable.is_file() or executable.suffix.lower() != ".exe":
                         raise ComputerToolError("The registered application executable is no longer available.")
-                    subprocess.Popen([str(executable)], shell=False, close_fds=True)
+                    os.startfile(str(executable))
                 elif app_id.startswith("startapp:"):
                     registered_id = app_id.removeprefix("startapp:")
                     if Path(registered_id).is_file() and Path(registered_id).suffix.lower() == ".lnk":
-                        _start_shortcut(registered_id)
+                        os.startfile(registered_id)
                     else:
-                        subprocess.Popen(
-                            ["explorer.exe", "shell:AppsFolder\\" + registered_id],
-                            shell=False,
-                            close_fds=True,
-                        )
+                        os.startfile("shell:AppsFolder\\" + registered_id)
                 else:
-                    _start_shortcut(app_id)
+                    os.startfile(app_id)
                 result = {"message": f"Opened {app}."}
             elif action == "open_path":
                 target = self._resolve_allowed_path(str(parameters.get("path", "")))
