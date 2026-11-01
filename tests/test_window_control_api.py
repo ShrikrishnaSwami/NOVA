@@ -1,11 +1,13 @@
 from fastapi.testclient import TestClient
 
 from nova.main import app
+from nova.api import computer as computer_api
 from nova.core.computer import window_control
 
 
 def test_window_control_api_requires_explicit_approval(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(computer_api, "_registry", lambda: type("Audit", (), {"_audit": lambda self, *args: None})())
     monkeypatch.setattr(
         window_control,
         "control_window",
