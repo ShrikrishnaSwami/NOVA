@@ -64,3 +64,21 @@ def computer_processes(limit: int = Query(default=100, ge=1, le=300)) -> dict[st
 def computer_windows(limit: int = Query(default=100, ge=1, le=300)) -> dict[str, Any]:
     from nova.core.computer.windows import foreground_window, list_windows
     return {"foreground": foreground_window(), "windows": list_windows(limit)}
+
+
+
+class WindowControlRequest(BaseModel):
+    handle: int = Field(ge=1)
+    action: Literal["focus", "minimize", "restore", "maximize"]
+    approved: bool = False
+
+
+@router.post("/windows/actions")
+def control_computer_window(request: WindowControlRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Window control requires explicit approval in the NOVA desktop interface.")
+    from nova.core.computer.window_control import WindowControlError, control_window
+    try:
+        return control_window(request.handle, request.action)
+    except WindowControlError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
