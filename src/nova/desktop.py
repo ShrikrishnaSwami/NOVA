@@ -1034,10 +1034,8 @@ class NovaWindow(QMainWindow):
         try:
             enabled = set_notifications_enabled(checked)
             self.notifications_action.setChecked(enabled)
-            self.tray.showMessage(
-                "NOVA notifications",
-                "NOVA reply notifications are enabled." if enabled else "NOVA reply notifications are disabled.",
-            )
+            if enabled:
+                self.tray.showMessage("NOVA notifications", "NOVA reply notifications are enabled.")
         except ShellIntegrationError as exc:
             self.notifications_action.setChecked(notifications_enabled())
             QMessageBox.warning(self, "Could not save notification preference", str(exc))
@@ -1077,7 +1075,7 @@ class NovaWindow(QMainWindow):
             event.accept()
             return
         self.hide()
-        if hasattr(self, "tray"):
+        if hasattr(self, "tray") and notifications_enabled():
             self.tray.showMessage("NOVA is still running", "Use Ctrl+Alt+Space or the tray icon to reopen NOVA.")
         event.ignore()
 
