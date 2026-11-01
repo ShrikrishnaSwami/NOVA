@@ -37,6 +37,8 @@ class ComputerControlsDialog(QDialog):
             ("Open app", self.open_app),
             ("List folder", self.list_folder),
             ("Search files", self.search_files),
+            ("Search contents", self.search_contents),
+            ("Open path", self.open_path),
             ("Read text file", self.read_file),
             ("Audit log", self.show_audit),
         ):
@@ -149,6 +151,16 @@ class ComputerControlsDialog(QDialog):
         query, accepted = QInputDialog.getText(self, "Search files", "File or folder name contains:")
         if accepted and query.strip():
             self.execute("search_files", {"root": root, "query": query.strip()}, f"search for '{query.strip()}' inside {root}")
+
+    def open_path(self) -> None:
+        path, accepted = QInputDialog.getText(self, "Open file or folder", "Full path to an item on an accessible drive:")
+        if accepted and path.strip():
+            self.execute("open_path", {"path": path.strip()}, "open " + path.strip() + " in Windows")
+
+    def search_contents(self) -> None:
+        query, accepted = QInputDialog.getText(self, "Search file contents", "Text to find inside supported local text files:")
+        if accepted and query.strip():
+            self.execute("search_file_contents", {"query": query.strip()}, "search accessible drives for " + query.strip())
 
     def read_file(self) -> None:
         capabilities = self.refresh_capabilities()
