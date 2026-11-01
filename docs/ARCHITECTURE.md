@@ -68,7 +68,7 @@ The SQLite memory service sits beside the provider adapter and is independent of
 5. SQLite conversation history and local vector memory with approval, editing, and deletion controls.
 6. Permission manager, tool registry, and audit log (first implementation now available).
 7. Streaming text conversation.
-8. Voice pipeline foundation: local push-to-talk transcription and local speech output. Next: permission manager, tool registry, audit log, and small allowlisted Windows tools.
+8. Voice pipeline foundation: local push-to-talk transcription and local speech output. Next: user-approved file handoff to chat and carefully scoped natural-language tool planning.
 
 
 ## Streaming and request performance
