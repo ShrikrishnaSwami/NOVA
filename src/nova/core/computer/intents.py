@@ -65,3 +65,48 @@ def match_open_application_command(
         if len(settings) == 1:
             return settings[0]
     return None
+
+
+def application_candidates(
+    message: str,
+    applications: Iterable[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Return best name matches for a launch request, retaining ambiguity for user choice."""
+    requested = requested_application_name(message)
+    if not requested:
+        return []
+    catalogue = list(applications)
+    scored: list[tuple[int, dict[str, str]]] = []
+    requested_words = set(requested.split())
+    for app in catalogue:
+        name = _normalize(str(app.get("name", "")))
+        if not name:
+            continue
+        words = set(name.split())
+        if name == requested:
+            score = 0
+        elif name.startswith(requested + " "):
+            score = 1
+        elif requested in words:
+            score = 2
+        elif requested_words and requested_words.issubset(words):
+            score = 3
+        else:
+            continue
+        scored.append((score, app))
+    if not scored and requested in {"settings", "windows settings"}:
+        scored = [
+            (0, app) for app in catalogue
+            if app.get("app_id") == "windows-settings"
+        ]
+    if not scored:
+        return []
+    best = min(score for score, _ in scored)
+    seen: set[str] = set()
+    results = []
+    for score, app in sorted(scored, key=lambda pair: _normalize(pair[1].get("name", ""))):
+        app_id = app.get("app_id", "")
+        if score == best and app_id not in seen:
+            results.append(app)
+            seen.add(app_id)
+    return results
