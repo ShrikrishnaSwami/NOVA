@@ -52,6 +52,14 @@ class OpenAICompatibleProvider:
         payload["stream"] = True
         async with self._client.stream("POST", f"{self.base_url}/chat/completions", headers=headers, json=payload) as response:
             response.raise_for_status()
+            # Some compatible servers ignore stream=true and return one JSON response.
+            if "text/event-stream" not in response.headers.get("content-type", "").lower():
+                data = await response.aread()
+                body = json.loads(data)
+                content = body["choices"][0]["message"]["content"]
+                if isinstance(content, str) and content:
+                    yield content
+                return
             async for line in response.aiter_lines():
                 if not line or not line.startswith("data:"):
                     continue

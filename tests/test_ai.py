@@ -40,3 +40,14 @@ def test_chat_rejects_system_role_in_client_history() -> None:
     )
 
     assert response.status_code == 422
+
+
+
+def test_streaming_chat_emits_tokens_and_timing() -> None:
+    response = client.post("/chat/stream", json={"message": "Hello, NOVA"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"type": "token"' in response.text
+    assert '"type": "done"' in response.text
+    assert '"ttft_ms"' in response.text
