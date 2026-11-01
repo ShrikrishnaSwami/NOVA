@@ -86,3 +86,13 @@ def test_os_query_planner_recognizes_read_only_questions() -> None:
     assert plan_os_query("What am I looking at?")["kind"] == "windows"
     assert plan_os_query("Show my system information")["kind"] == "system"
     assert plan_os_query("Tell me a joke") is None
+
+
+def test_window_planner_recognizes_conversational_window_actions() -> None:
+    from nova.core.computer.intents import plan_window_intent
+
+    assert plan_window_intent("Switch to Chrome") == {"target": "Chrome", "action": "focus"}
+    assert plan_window_intent("Minimize the Notepad window") == {"target": "Notepad", "action": "minimize"}
+    assert plan_window_intent("Please maximize Calculator") == {"target": "Calculator", "action": "maximize"}
+    assert plan_window_intent("Restore Explorer") == {"target": "Explorer", "action": "restore"}
+    assert plan_window_intent("Delete Chrome") is None
