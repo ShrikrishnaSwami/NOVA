@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import match_open_application_command, requested_application_name
+from nova.core.computer.intents import application_candidates, match_open_application_command, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -457,16 +457,38 @@ class NovaWindow(QMainWindow):
         if not message or (self.worker and self.worker.isRunning()):
             return
 
-        # Match launch requests against the live Windows Start Menu catalogue.
+        # Resolve direct launch requests against the live Windows application catalogue.
+        requested_target = requested_application_name(message)
+        requested_app = None
         discovery_error = None
-        try:
-            capabilities_response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/capabilities")
-            capabilities_response.raise_for_status()
-            discovered_apps = capabilities_response.json().get("applications", [])
-            requested_app = match_open_application_command(message, discovered_apps)
-        except Exception as exc:
-            requested_app = None
-            discovery_error = str(exc)
+        discovered_apps = []
+        if requested_target:
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/capabilities")
+                response.raise_for_status()
+                discovered_apps = response.json().get("applications", [])
+                candidates = application_candidates(message, discovered_apps)
+                if len(candidates) == 1:
+                    requested_app = candidates[0]
+                elif len(candidates) > 1:
+                    labels = [item.get("name", "Unnamed application") for item in candidates]
+                    selected_name, accepted = QInputDialog.getItem(
+                        self,
+                        "Choose application",
+                        f"More than one installed app matches '{requested_target}':",
+                        labels,
+                        0,
+                        False,
+                    )
+                    if accepted:
+                        requested_app = next(
+                            (item for item in candidates if item.get("name") == selected_name),
+                            None,
+                        )
+                    else:
+                        return
+            except Exception as exc:
+                discovery_error = str(exc)
 
         if requested_app:
             app_name = requested_app["name"]
@@ -483,37 +505,17 @@ class NovaWindow(QMainWindow):
                 f"open {app_name}",
             )
             reply = (
-                f"Opened {app_name}."
+                f"Windows accepted the launch request for {app_name}."
                 if result
-                else f"I didn't open {app_name}. The action was cancelled or blocked."
+                else f"I didn't open {app_name}. The action was cancelled or Windows blocked it."
             )
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText(reply)
             return
 
-        unresolved_target = requested_application_name(message)
-        if unresolved_target:
-            self.input.clear()
-            self._add_message("YOU", message)
-            self.history.append({"role": "user", "content": message})
-            if discovery_error:
-                reply = (
-                    "I couldn't check the installed-app list because NOVA couldn't reach its "
-                    f"computer-controls API ({discovery_error}). Make sure NOVA's backend is "
-                    "running, then try again."
-                )
-            else:
-                reply = (
-                    f"I couldn't find an installed app matching '{unresolved_target}' in the "
-                    "Windows app catalogue. Open Computer controls and refresh the list. "
-                    "NOVA won't claim it opened an app unless Windows launch was actually requested."
-                )
-            self._add_message("NOVA", reply)
-            self.history.append({"role": "assistant", "content": reply})
-            self.connection_label.setText(reply)
-            return
-
+        # If the catalogue did not identify the target, do not invent a launch.
+        # Let NOVA explain the limitation or ask for clarification in normal chat.
         self.input.clear()
         self._add_message("YOU", message)
         self.history.append({"role": "user", "content": message})
