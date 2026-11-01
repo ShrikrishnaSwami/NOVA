@@ -1,31 +1,40 @@
-"""Deterministic, conservative parsing for simple computer commands."""
+"""Deterministic parsing for explicit launches from NOVA's discovered app catalogue."""
 
 from __future__ import annotations
 
 import re
+from typing import Iterable
 
-_OPEN_APP_PATTERN = re.compile(
-    r"^(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?"
-    r"(windows\s+settings|settings|calculator|calc|notepad|paint|file\s+explorer|explorer)"
-    r"(?:\s+please)?[.!?]*$",
-    re.IGNORECASE,
-)
-
-_APP_ALIASES = {
-    "windows settings": "windows settings",
-    "settings": "windows settings",
-    "calc": "calculator",
-    "calculator": "calculator",
-    "notepad": "notepad",
-    "paint": "paint",
-    "file explorer": "file explorer",
-    "explorer": "file explorer",
-}
+_OPEN_PREFIX = re.compile(r"^(?:please\\s+)?(?:open|launch|start)\\s+(?:the\\s+)?(.+?)(?:\\s+please)?[.!?]*$", re.IGNORECASE)
 
 
-def match_open_application_command(message: str) -> str | None:
-    """Return an allowlisted app for an unambiguous open/launch/start command."""
-    match = _OPEN_APP_PATTERN.fullmatch(message.strip())
+def _normalize(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def match_open_application_command(
+    message: str,
+    applications: Iterable[dict[str, str]],
+) -> dict[str, str] | None:
+    """Match an exact discovered app name; ambiguous names are deliberately ignored."""
+    match = _OPEN_PREFIX.fullmatch(message.strip())
     if not match:
         return None
-    return _APP_ALIASES[re.sub(r"\s+", " ", match.group(1).lower())]
+    requested = _normalize(match.group(1))
+    if not requested:
+        return None
+    candidates = [
+        app for app in applications
+        if _normalize(str(app.get("name", ""))) == requested
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    # Friendly, deterministic alias for the built-in Settings URI.
+    if requested == "settings":
+        candidates = [
+            app for app in applications
+            if app.get("app_id") == "windows-settings"
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+    return None
