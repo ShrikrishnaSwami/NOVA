@@ -35,12 +35,14 @@ class ToolRegistry:
             "simulation": tool.simulation,
         } for tool in self._tools.values()]
 
-    def execute_chain(self, calls: list[dict[str, Any]], *, approved: bool = False) -> list[dict[str, Any]]:
+    def validate_chain(self, calls: list[dict[str, Any]]) -> list[tuple[ToolSpec, dict[str, Any]]]:
+        """Validate every call and argument before any handler can run."""
         if not calls or len(calls) > 5:
             raise ValueError("A tool chain must contain between one and five calls.")
-        # Validate every call before executing any call.
         validated: list[tuple[ToolSpec, dict[str, Any]]] = []
         for call in calls:
+            if not isinstance(call, dict):
+                raise ValueError("Each tool call must be an object.")
             name = str(call.get("name", ""))
             tool = self._tools.get(name)
             if tool is None:
@@ -54,13 +56,34 @@ class ToolRegistry:
                 raise ValueError(f"Unknown argument supplied to {name}.")
             if any(key not in arguments for key in required):
                 raise ValueError(f"Missing required argument for {name}.")
+            for key, value in arguments.items():
+                schema = properties.get(key, {})
+                if "enum" in schema and value not in schema["enum"]:
+                    raise ValueError(f"Invalid value for {name}.{key}.")
+                expected = schema.get("type")
+                if expected == "string" and not isinstance(value, str):
+                    raise ValueError(f"{name}.{key} must be a string.")
+                if expected == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+                    raise ValueError(f"{name}.{key} must be an integer.")
+                if expected == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+                    raise ValueError(f"{name}.{key} must be numeric.")
+                if expected == "boolean" and not isinstance(value, bool):
+                    raise ValueError(f"{name}.{key} must be a boolean.")
             validated.append((tool, arguments))
+        return validated
+
+    def execute_chain(self, calls: list[dict[str, Any]], *, approved: bool = False) -> list[dict[str, Any]]:
+        validated = self.validate_chain(calls)
         if not approved:
             raise PermissionError("Tool chain requires explicit approval.")
         results = []
         for tool, arguments in validated:
             result = tool.handler(arguments)
-            results.append({"tool": tool.name, "simulation": tool.simulation, "result": result})
+            results.append({
+                "tool": tool.name,
+                "simulation": tool.simulation,
+                "result": result,
+            })
         return results
 
 
