@@ -408,7 +408,7 @@ class ComputerToolRegistry:
                     raise ComputerToolError("NOVA can only read supported text formats up to 2 MB.")
                 size = file_path.stat().st_size
                 if size > _MAX_READ_BYTES:
-                    raise ComputerToolError("That file is larger than NOVA's 64 KB reading limit.")
+                    raise ComputerToolError("That file is larger than NOVA's 2 MB reading limit.")
                 content = file_path.read_text(encoding="utf-8-sig")
                 result = {"path": str(file_path), "content": content}
             else:
