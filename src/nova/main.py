@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.5",
+    version="0.1.6",
     description="Windows-integrated local API, AI, memory, permissioned automation, and scheduled tasks for NOVA.",
     lifespan=lifespan,
 )

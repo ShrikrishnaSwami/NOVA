@@ -1777,30 +1777,55 @@ class NovaWindow(QMainWindow):
         description.setWordWrap(True)
         description.setObjectName("muted")
         layout.addWidget(description)
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Search saved memories…")
+        layout.addWidget(search_input)
+        stats_label = QLabel("Loading memory statistics…")
+        stats_label.setObjectName("muted")
+        layout.addWidget(stats_label)
         items = QListWidget()
         layout.addWidget(items, 1)
 
-        def refresh() -> None:
+        memories_cache: list[dict[str, Any]] = []
+
+        def render_memories() -> None:
             items.clear()
-            try:
-                response = _HTTP_CLIENT.get(f"{API_ROOT}/memory")
-                response.raise_for_status()
-                memories = response.json().get("memories", [])
-            except Exception as exc:
-                QMessageBox.warning(dialog, "Memory unavailable", str(exc))
-                return
-            for memory in memories:
+            query = search_input.text().strip().casefold()
+            for memory in memories_cache:
+                if query and query not in memory.get("content", "").casefold() and query not in memory.get("category", "").casefold():
+                    continue
                 prefix = "PENDING · " if memory.get("status") == "pending" else ""
-                item = QListWidgetItem(prefix + memory.get("content", ""))
+                pin_prefix = "★ PINNED · " if memory.get("pinned") else ""
+                usage = f" · used {memory.get('access_count', 0)}×" if memory.get("access_count") else ""
+                item = QListWidgetItem(f"{pin_prefix}{prefix}{memory.get('content', '')}{usage}")
                 item.setData(Qt.ItemDataRole.UserRole, memory)
                 items.addItem(item)
 
+        def refresh() -> None:
+            try:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}/memory")
+                response.raise_for_status()
+                memories_cache[:] = response.json().get("memories", [])
+                stats_response = _HTTP_CLIENT.get(f"{API_ROOT}/memory/stats")
+                stats_response.raise_for_status()
+                stats = stats_response.json()
+                stats_label.setText(
+                    f"{stats.get('total', 0)} memories · {stats.get('pinned', 0)} pinned · "
+                    f"{stats.get('retrievals', 0)} retrievals"
+                )
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Memory unavailable", str(exc))
+                return
+            render_memories()
+
         actions = QHBoxLayout()
         approve_button = QPushButton("Approve")
+        pin_button = QPushButton("Pin / unpin")
         edit_button = QPushButton("Edit")
         delete_button = QPushButton("Delete")
         close_button = QPushButton("Close")
         actions.addWidget(approve_button)
+        actions.addWidget(pin_button)
         actions.addWidget(edit_button)
         actions.addWidget(delete_button)
         actions.addStretch()
@@ -1810,6 +1835,21 @@ class NovaWindow(QMainWindow):
         def selected_memory() -> dict | None:
             item = items.currentItem()
             return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+        def toggle_pin() -> None:
+            memory = selected_memory()
+            if not memory:
+                return
+            pinned = not bool(memory.get("pinned"))
+            try:
+                response = _HTTP_CLIENT.patch(
+                    f"{API_ROOT}/memory/{memory['id']}/pin",
+                    json={"pinned": pinned},
+                )
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not update pinned memory", str(exc))
 
         def approve() -> None:
             memory = selected_memory()
@@ -1853,7 +1893,9 @@ class NovaWindow(QMainWindow):
             except Exception as exc:
                 QMessageBox.warning(dialog, "Could not delete memory", str(exc))
 
+        search_input.textChanged.connect(lambda _text: render_memories())
         approve_button.clicked.connect(approve)
+        pin_button.clicked.connect(toggle_pin)
         edit_button.clicked.connect(edit)
         delete_button.clicked.connect(delete)
         close_button.clicked.connect(dialog.accept)

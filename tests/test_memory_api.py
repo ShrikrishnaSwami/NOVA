@@ -52,3 +52,25 @@ def test_conversation_endpoints_list_read_and_delete(tmp_path, monkeypatch) -> N
     deleted = client.delete("/conversations/api-conversation")
     assert deleted.status_code == 200
     assert client.get("/conversations/api-conversation").status_code == 404
+
+
+def test_memory_endpoints_support_pinning_and_stats(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "api-memory-pinning.sqlite3"
+    monkeypatch.setattr(memory_api, "get_settings", lambda: TestSettings(str(database)))
+    store = MemoryStore(database)
+    memory = store.capture_from_text("I prefer dark mode in desktop apps.")
+    assert memory is not None
+
+    client = TestClient(app)
+    stats = client.get("/memory/stats")
+    assert stats.status_code == 200
+    assert stats.json()["total"] == 1
+
+    pinned = client.patch(f"/memory/{memory['id']}/pin", json={"pinned": True})
+    assert pinned.status_code == 200
+    assert pinned.json()["pinned"] is True
+    assert client.get("/memory").json()["memories"][0]["pinned"] is True
+
+    unpinned = client.patch(f"/memory/{memory['id']}/pin", json={"pinned": False})
+    assert unpinned.status_code == 200
+    assert unpinned.json()["pinned"] is False
