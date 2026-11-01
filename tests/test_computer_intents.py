@@ -76,4 +76,4 @@ def test_planner_requires_explicit_paths_for_open_and_read() -> None:
     assert plan_computer_intent(r"Open C:\Users\Apha\Documents\notes.txt")["action"] == "open_path"
     assert plan_computer_intent(r"Read C:\Users\Apha\Documents\notes.txt")["action"] == "read_text_file"
     assert plan_computer_intent("Open my private files") is None
-    assert plan_computer_intent("Delete C:\Users\Apha\Documents\notes.txt") is None
+    assert plan_computer_intent(r"Delete C:\Users\Apha\Documents\notes.txt") is None
