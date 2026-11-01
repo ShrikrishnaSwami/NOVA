@@ -19,8 +19,32 @@ class MemoryUpdate(BaseModel):
 
 
 @router.get("/memory")
-def list_memories(status: str | None = Query(default=None, pattern="^(approved|pending)$")) -> dict:
-    return {"memories": _store().list_memories(status)}
+def list_memories(
+    status: str | None = Query(default=None, pattern="^(approved|pending)$"),
+    category: str | None = Query(default=None, min_length=1, max_length=64),
+) -> dict:
+    return {"memories": _store().list_memories(status, category)}
+
+
+@router.get("/memory/stats")
+def memory_stats() -> dict:
+    return _store().memory_stats()
+
+
+@router.get("/memory/search")
+def search_memories(q: str = Query(min_length=1, max_length=500), limit: int = Query(default=10, ge=1, le=50)) -> dict:
+    return {"query": q, "memories": _store().retrieve(q, limit=limit)}
+
+
+class MemoryPin(BaseModel):
+    pinned: bool
+
+
+@router.patch("/memory/{memory_id}/pin")
+def pin_memory(memory_id: str, request: MemoryPin) -> dict:
+    if not _store().pin_memory(memory_id, request.pinned):
+        raise HTTPException(status_code=404, detail="Memory not found.")
+    return {"id": memory_id, "pinned": request.pinned}
 
 
 @router.post("/memory/{memory_id}/approve")

@@ -114,7 +114,10 @@ class MemoryStore:
                     source TEXT NOT NULL,
                     vector TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    last_accessed_at TEXT,
+                    access_count INTEGER NOT NULL DEFAULT 0,
+                    pinned INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_memories_status
                     ON memories(status, updated_at);
@@ -141,10 +144,14 @@ class MemoryStore:
             )
 
     def retrieve(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
+        """Retrieve approved memories using local semantic and lexical ranking."""
+        if not query.strip() or limit < 1:
+            return []
         query_vector = _vector(query)
+        query_terms = set(w.lower() for w in _WORDS.findall(query) if w.lower() not in _STOPWORDS)
         with self._connect() as db:
             rows = db.execute(
-                "SELECT id, content, category, vector FROM memories WHERE status = 'approved'"
+                "SELECT id, content, category, vector, pinned FROM memories WHERE status = 'approved'"
             ).fetchall()
         ranked = []
         for row in rows:
@@ -152,10 +159,22 @@ class MemoryStore:
                 candidate = json.loads(row["vector"])
             except (TypeError, json.JSONDecodeError):
                 continue
-            score = _cosine(query_vector, candidate)
+            semantic = _cosine(query_vector, candidate)
+            terms = set(w.lower() for w in _WORDS.findall(row["content"]) if w.lower() not in _STOPWORDS)
+            lexical = len(query_terms & terms) / max(1, len(query_terms))
+            score = semantic * 0.8 + lexical * 0.2
             if score > 0.08:
-                ranked.append({"id": row["id"], "content": row["content"], "category": row["category"], "score": round(score, 4)})
-        return sorted(ranked, key=lambda item: item["score"], reverse=True)[:limit]
+                ranked.append({"id": row["id"], "content": row["content"], "category": row["category"],
+                               "score": round(score, 4), "pinned": bool(row["pinned"])})
+        results = sorted(ranked, key=lambda item: (item["pinned"], item["score"]), reverse=True)[:limit]
+        if results:
+            now = _now()
+            with self._connect() as db:
+                db.executemany(
+                    "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?",
+                    [(now, item["id"]) for item in results],
+                )
+        return results
 
     def capture_from_text(self, text: str) -> dict[str, Any] | None:
         """Capture safe facts; queue high-impact facts for explicit approval."""
@@ -193,10 +212,22 @@ class MemoryStore:
         vector = json.dumps(_vector(content), separators=(",", ":"))
         with self._connect() as db:
             existing = db.execute(
-                "SELECT id, status FROM memories WHERE lower(content) = lower(?)", (content,)
+                "SELECT id, status FROM memories WHERE lower(trim(content)) = lower(trim(?))", (content,)
             ).fetchone()
             if existing:
+                db.execute("UPDATE memories SET updated_at = ? WHERE id = ?", (now, existing["id"]))
                 return {"id": existing["id"], "status": existing["status"], "content": content, "duplicate": True}
+            for candidate in db.execute(
+                "SELECT id, status, vector FROM memories WHERE status = ? AND category = ?",
+                (status, category),
+            ).fetchall():
+                try:
+                    similarity = _cosine(_vector(content), json.loads(candidate["vector"]))
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if similarity >= 0.96:
+                    db.execute("UPDATE memories SET updated_at = ? WHERE id = ?", (now, candidate["id"]))
+                    return {"id": candidate["id"], "status": candidate["status"], "content": content, "duplicate": True}
             memory_id = str(uuid4())
             db.execute(
                 """INSERT INTO memories(id, content, category, status, source, vector, created_at, updated_at)
@@ -205,18 +236,43 @@ class MemoryStore:
             )
         return {"id": memory_id, "content": content, "status": status, "category": category}
 
-    def list_memories(self, status: str | None = None) -> list[dict[str, Any]]:
+    def list_memories(self, status: str | None = None, category: str | None = None) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[str] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if category:
+            clauses.append("category = ?")
+            params.append(category)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
         with self._connect() as db:
-            if status:
-                rows = db.execute(
-                    "SELECT id, content, category, status, source, created_at, updated_at FROM memories WHERE status = ? ORDER BY updated_at DESC",
-                    (status,),
-                ).fetchall()
-            else:
-                rows = db.execute(
-                    "SELECT id, content, category, status, source, created_at, updated_at FROM memories ORDER BY updated_at DESC"
-                ).fetchall()
+            rows = db.execute(
+                "SELECT id, content, category, status, source, created_at, updated_at, "
+                "last_accessed_at, access_count, pinned FROM memories" + where +
+                " ORDER BY pinned DESC, updated_at DESC", params,
+            ).fetchall()
         return [dict(row) for row in rows]
+
+    def memory_stats(self) -> dict[str, Any]:
+        with self._connect() as db:
+            totals = db.execute("SELECT status, COUNT(*) AS count FROM memories GROUP BY status").fetchall()
+            categories = db.execute("SELECT category, COUNT(*) AS count FROM memories GROUP BY category ORDER BY count DESC").fetchall()
+            row = db.execute("SELECT COUNT(*) AS total, SUM(pinned) AS pinned, SUM(access_count) AS retrievals FROM memories").fetchone()
+        return {
+            "total": row["total"] or 0, "pinned": row["pinned"] or 0,
+            "retrievals": row["retrievals"] or 0,
+            "by_status": {item["status"]: item["count"] for item in totals},
+            "by_category": {item["category"]: item["count"] for item in categories},
+        }
+
+    def pin_memory(self, memory_id: str, pinned: bool = True) -> bool:
+        with self._connect() as db:
+            cursor = db.execute(
+                "UPDATE memories SET pinned = ?, updated_at = ? WHERE id = ?",
+                (1 if pinned else 0, _now(), memory_id),
+            )
+            return cursor.rowcount > 0
 
     def approve_memory(self, memory_id: str) -> bool:
         with self._connect() as db:

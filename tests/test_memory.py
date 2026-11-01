@@ -99,3 +99,62 @@ def test_editing_memory_to_credentials_is_rejected(tmp_path) -> None:
     else:
         raise AssertionError("Credential-like memory edits must be rejected.")
     assert store.list_memories()[0]["content"] == memory["content"]
+
+
+
+def test_memory_schema_migrates_existing_database_without_losing_rows(tmp_path) -> None:
+    import sqlite3
+
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as db:
+        db.executescript("""
+            CREATE TABLE memories (
+                id TEXT PRIMARY KEY, content TEXT NOT NULL, category TEXT NOT NULL,
+                status TEXT NOT NULL, source TEXT NOT NULL, vector TEXT NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            INSERT INTO memories VALUES (
+                'legacy-1', 'I prefer dark mode.', 'preference', 'approved',
+                'automatic', '[0]', '2026-01-01', '2026-01-01'
+            );
+        """)
+
+    store = MemoryStore(database)
+    memory = store.list_memories()[0]
+    assert memory["id"] == "legacy-1"
+    assert memory["access_count"] == 0
+    assert memory["pinned"] == 0
+
+
+def test_memory_retrieval_tracks_usage_and_pinned_memories(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    memory = store.capture_from_text("I prefer dark mode for my desktop applications.")
+    assert memory is not None
+    assert store.pin_memory(memory["id"])
+    assert store.retrieve("desktop applications dark mode")
+    item = store.list_memories()[0]
+    assert item["pinned"] == 1
+    assert item["access_count"] > 0
+    assert item["last_accessed_at"] is not None
+    assert store.memory_stats()["retrievals"] > 0
+
+
+def test_memory_category_filter_and_stats(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    store.capture_from_text("I prefer dark mode for my desktop applications.")
+    store.capture_from_text("I am building a local desktop assistant project.")
+    preferences = store.list_memories(category="preference")
+    stats = store.memory_stats()
+    assert len(preferences) == 1
+    assert stats["total"] == 2
+    assert stats["by_category"]["preference"] == 1
+
+
+def test_duplicate_memory_is_not_inserted_twice(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    first = store.capture_from_text("I prefer dark mode for my desktop applications.")
+    duplicate = store.capture_from_text("I prefer dark mode for my desktop applications.")
+    assert first and duplicate
+    assert duplicate["duplicate"] is True
+    assert first["id"] == duplicate["id"]
+    assert len(store.list_memories()) == 1
