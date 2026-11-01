@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 from nova.config import environment_file, get_settings, user_data_dir
 from nova.core.computer.automation import AutomationEngine, AutomationPlanError, execute_plan
+from nova.core.tasks.intents import plan_task_intent
 from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_multi_step_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
@@ -496,9 +497,149 @@ class NovaWindow(QMainWindow):
         ))
         return body
 
+    def _handle_task_intent(self, message: str) -> bool:
+        """Handle bounded scheduled-task commands directly from chat."""
+        intent = plan_task_intent(message)
+        if intent is None:
+            return False
+
+        self.input.clear()
+        self._add_message("YOU", message)
+        self.history.append({"role": "user", "content": message})
+
+        def respond(reply: str) -> None:
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
+
+        kind = intent["kind"]
+        if kind == "open":
+            respond("Opening your scheduled tasks.")
+            self._open_task_manager()
+            return True
+
+        if kind == "clarify" or kind == "unsupported":
+            respond(str(intent.get("message", "I need a little more information to schedule that.")))
+            return True
+
+        try:
+            response = _HTTP_CLIENT.get(f"{API_ROOT}/tasks")
+            response.raise_for_status()
+            tasks = response.json().get("tasks", [])
+        except Exception as exc:
+            respond(f"I couldn't reach the scheduled-task service: {exc}")
+            return True
+
+        if kind == "list":
+            if not tasks:
+                respond("You don't have any scheduled tasks yet. Try: 'schedule a storage report tomorrow at 10 AM'.")
+                return True
+            lines = []
+            for task in tasks[:30]:
+                lines.append(
+                    f"• {task.get('title', 'Untitled')} — {task.get('status', 'unknown').replace('_', ' ')}"
+                    f" — next run: {task.get('schedule_at', 'not scheduled')} ({task.get('recurrence', 'once')})"
+                )
+            respond("Here are your scheduled tasks:\n" + "\n".join(lines))
+            return True
+
+        if kind == "schedule":
+            title = str(intent["title"])
+            action_id = str(intent["action_id"])
+            schedule_at = str(intent["schedule_at"])
+            recurrence = str(intent["recurrence"])
+            details = (
+                f"Create this scheduled task?\n\n{title}\n"
+                f"Action: {action_id}\nRun at: {schedule_at}\n"
+                f"Repeat: {recurrence}\n\nIt will be created as pending approval."
+            )
+            answer = QMessageBox.question(
+                self, "Confirm scheduled task", details,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                respond("I didn't create the scheduled task.")
+                return True
+            try:
+                created = _HTTP_CLIENT.post(f"{API_ROOT}/tasks", json={
+                    "title": title, "action_id": action_id, "parameters": {},
+                    "schedule_at": schedule_at, "recurrence": recurrence,
+                })
+                created.raise_for_status()
+                task = created.json()["task"]
+            except Exception as exc:
+                respond(f"I couldn't create that task: {exc}")
+                return True
+
+            approval = QMessageBox.question(
+                self, "Approve scheduled task?",
+                f"Approve this exact task to run automatically?\n\n"
+                f"{task['title']}\nNext run: {task['schedule_at']}\n"
+                f"Repeat: {task['recurrence']}\n\n"
+                "The action is read-only and limited to NOVA's registered report handlers.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if approval == QMessageBox.StandardButton.Yes:
+                try:
+                    approved = _HTTP_CLIENT.post(f"{API_ROOT}/tasks/{task['id']}/approve")
+                    approved.raise_for_status()
+                    respond(f"Scheduled and approved: {title}. It will run at {schedule_at} ({recurrence}).")
+                except Exception as exc:
+                    respond(f"The task was created but I couldn't approve it: {exc}. You can approve it in Scheduled tasks.")
+            else:
+                respond(f"Created '{title}' as pending approval. It will not run until you approve it in Scheduled tasks.")
+            return True
+
+        if kind in {"pause", "cancel"}:
+            target_name = str(intent["target"]).casefold()
+            eligible = [
+                task for task in tasks
+                if target_name in str(task.get("title", "")).casefold()
+                and task.get("status") in {"pending_approval", "scheduled", "paused"}
+            ]
+            if not eligible:
+                respond(f"I couldn't find an active task matching '{intent['target']}'. Say 'show my tasks' to see the exact task names.")
+                return True
+            if len(eligible) > 1:
+                labels = [f"{task['title']} — {task['status']} — {task['schedule_at']}" for task in eligible]
+                selected, accepted = QInputDialog.getItem(
+                    self, "Choose scheduled task", "Which task do you want to " + kind + "?",
+                    labels, 0, False,
+                )
+                if not accepted:
+                    respond("I left your tasks unchanged.")
+                    return True
+                task = eligible[labels.index(selected)]
+            else:
+                task = eligible[0]
+            answer = QMessageBox.question(
+                self, f"Confirm {kind}",
+                f"{kind.title()} this task?\n\n{task['title']}\n"
+                f"Current status: {task['status']}\nNext run: {task['schedule_at']}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                respond("I left your task unchanged.")
+                return True
+            try:
+                changed = _HTTP_CLIENT.post(f"{API_ROOT}/tasks/{task['id']}/{kind}")
+                changed.raise_for_status()
+                respond(f"Task '{task['title']}' is now {changed.json()['task']['status']}.")
+            except Exception as exc:
+                respond(f"I couldn't {kind} that task: {exc}")
+            return True
+
+        return False
+
     def _send_message(self) -> None:
         message = self.input.text().strip()
         if not message or (self.worker and self.worker.isRunning()):
+            return
+
+        if self._handle_task_intent(message):
             return
 
         # A chained request is planned completely before any step runs.
