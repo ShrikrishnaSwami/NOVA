@@ -102,3 +102,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and milestones
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+### Response performance
+
+NOVA now exposes `POST /chat/stream` for server-sent token events, reuses its provider's HTTP connection pool between requests, and reports time-to-first-token and total-generation timing. The original `POST /chat` endpoint remains available.
+
+Model residency is controlled by the local runtime, not NOVA's generic OpenAI-compatible adapter. If your runtime unloads idle models, enable its keep-loaded / auto-unload setting where available; the exact option depends on runtime and version.

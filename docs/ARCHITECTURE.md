@@ -64,3 +64,10 @@ Planned services will add memory and permission-scoped tools beside the provider
 6. Permission manager, tool registry, and audit log.
 7. Streaming text conversation.
 8. Voice pipeline and small, allowlisted Windows tools.
+
+
+## Streaming and request performance
+
+- The backend reuses one provider instance and asynchronous HTTPX connection pool, closed during FastAPI shutdown.
+- `POST /chat/stream` emits token events followed by `ttft_ms` and `total_ms`; `POST /chat` remains supported.
+- Keeping model weights resident is a model-runtime setting. There is no universal keep-alive parameter across OpenAI-compatible servers.
