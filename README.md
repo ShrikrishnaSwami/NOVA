@@ -2,7 +2,7 @@
 
 NOVA is an open-source hybrid AI desktop assistant for Windows, built around voice, memory, local and cloud intelligence, and permission-based computer control.
 
-The project is in active early development. The current release includes a local FastAPI backend, a provider-independent chat layer, and the first lightweight Windows desktop interface.
+The project is in active development. NOVA includes a local FastAPI service, provider-independent AI chat, persistent memory, offline voice options, and permission-gated Windows desktop integration.
 
 ## Current capabilities
 
@@ -116,7 +116,7 @@ NOVA's installed configuration is read from `%APPDATA%\\NOVA\\.env` on Windows. 
 
 ## Persistent memory
 
-NOVA stores its conversation history and long-term memories in a local SQLite database. By default the database is created at `~/.nova/nova_memory.sqlite3`; override it with `NOVA_MEMORY_DB_PATH` in your private `.env` file.
+NOVA stores its conversation history and long-term memories in a local SQLite database. On Windows the installed application stores it at `%LOCALAPPDATA%\\NOVA\\nova_memory.sqlite3`; development installs on other platforms default to `~/.nova/nova_memory.sqlite3`. Override it with `NOVA_MEMORY_DB_PATH` in your private settings file.
 
 Memory retrieval uses deterministic local feature-hash vectors and cosine similarity. It does not send memory text to an embedding API and does not require a separate vector database. This is intentionally lightweight; a dedicated local embedding model can replace the encoder later.
 
@@ -188,7 +188,7 @@ NOVA does not give a language model unrestricted shell or computer access. Compu
 
 ## Roadmap
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and milestones.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and milestones, and [docs/WINDOWS_INSTALLER.md](docs/WINDOWS_INSTALLER.md) for packaging, installation, and the Windows session lifecycle.
 
 ## License
 
