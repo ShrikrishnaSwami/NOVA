@@ -82,3 +82,62 @@ def control_computer_window(request: WindowControlRequest) -> dict[str, Any]:
         return control_window(request.handle, request.action)
     except WindowControlError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+
+class VolumeControlRequest(BaseModel):
+    percent: int = Field(ge=0, le=100)
+    muted: bool | None = None
+    approved: bool = False
+
+
+class BrightnessControlRequest(BaseModel):
+    percent: int = Field(ge=0, le=100)
+    approved: bool = False
+
+
+class WindowsSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+    approved: bool = False
+
+
+@router.post("/system/volume")
+def set_computer_volume(request: VolumeControlRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Changing system volume requires explicit approval.")
+    from nova.core.computer.system_controls import WindowsControlError, set_master_volume
+    try:
+        result = set_master_volume(request.percent, request.muted)
+        _registry()._audit("set_system_volume", {}, "success", result["message"])
+        return result
+    except WindowsControlError as exc:
+        _registry()._audit("set_system_volume", {}, "blocked", str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/system/brightness")
+def set_computer_brightness(request: BrightnessControlRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Changing display brightness requires explicit approval.")
+    from nova.core.computer.system_controls import WindowsControlError, set_display_brightness
+    try:
+        result = set_display_brightness(request.percent)
+        _registry()._audit("set_display_brightness", {}, "success", result["message"])
+        return result
+    except WindowsControlError as exc:
+        _registry()._audit("set_display_brightness", {}, "blocked", str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/windows/search")
+def launch_windows_search(request: WindowsSearchRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Opening Windows Search requires explicit approval.")
+    from nova.core.computer.system_controls import WindowsControlError, open_windows_search
+    try:
+        result = open_windows_search(request.query)
+        _registry()._audit("windows_search", {"query": request.query}, "success", "Opened native Windows Search.")
+        return result
+    except WindowsControlError as exc:
+        _registry()._audit("windows_search", {"query": request.query}, "blocked", str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
