@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: nova-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
