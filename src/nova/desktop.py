@@ -44,7 +44,8 @@ from PySide6.QtWidgets import (
 from nova.core.computer.shell_integration import ShellIntegrationError, set_startup_enabled, startup_enabled, show_windows_toast
 
 
-API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
+_SETTINGS = get_settings()
+API_ROOT = os.getenv("NOVA_API_URL", f"http://{_SETTINGS.host}:{_SETTINGS.port}").rstrip("/")
 
 
 _HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(150.0, connect=5.0))
