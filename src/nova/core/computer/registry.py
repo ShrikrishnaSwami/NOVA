@@ -15,6 +15,30 @@ _WINDOWS_SETTINGS_ID = "windows-settings"
 _TEXT_SUFFIXES = {".txt", ".md", ".py", ".json", ".csv", ".log", ".yaml", ".yml", ".toml", ".ini"}
 _MAX_READ_BYTES = 64 * 1024
 _MAX_SEARCH_RESULTS = 200
+_MAX_APPLICATIONS = 2000
+
+
+def _start_shortcut(path: str) -> None:
+    """Launch a discovered Windows shortcut through the Windows Shell."""
+    startfile = getattr(os, "startfile", None)
+    if startfile is None:
+        raise ComputerToolError("Start Menu shortcut launching is only available on Windows.")
+    startfile(path)
+
+
+def _start_menu_roots() -> list[Path]:
+    roots = []
+    for raw in (os.environ.get("APPDATA", ""), os.environ.get("PROGRAMDATA", "")):
+        if not raw:
+            continue
+        base = Path(raw) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        try:
+            resolved = base.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if resolved.is_dir() and resolved not in roots:
+            roots.append(resolved)
+    return roots
 
 
 def _now() -> str:
