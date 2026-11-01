@@ -65,19 +65,21 @@ Use the exact model ID and API address shown by your model runtime. Keep `.env` 
 
 ## Run NOVA
 
-Start the backend in PowerShell window 1:
-
-```powershell
-uvicorn nova.main:app --reload
-```
-
-Start the desktop interface in PowerShell window 2:
+Start the desktop interface:
 
 ```powershell
 nova-desktop
 ```
 
-The desktop client connects to `http://127.0.0.1:8000`. To use a different backend address, set `NOVA_API_URL` before launching it:
+NOVA checks whether its local API is already healthy. If not, it starts a backend process bound only to the configured loopback address and port, then connects the desktop automatically. When you choose **Quit NOVA**, it stops only the backend process that this desktop instance started; it never terminates a backend that was already running.
+
+For development, you can still start the backend manually in a separate terminal:
+
+```powershell
+uvicorn nova.main:app --reload
+```
+
+The desktop client normally connects to `http://127.0.0.1:8000`. To use a different backend address, set `NOVA_API_URL` before launching it:
 
 ```powershell
 $env:NOVA_API_URL = "http://127.0.0.1:8000"
