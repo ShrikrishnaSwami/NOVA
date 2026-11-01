@@ -242,3 +242,23 @@ def plan_system_intent(message: str) -> dict[str, object] | None:
                 "description": f"open Windows Search for '{query}'",
             }
     return None
+
+
+
+def plan_multi_step_intent(message: str) -> list[dict[str, object]] | None:
+    """Plan up to five explicitly chained, supported system/window actions."""
+    parts = re.split(r"\s+then\s+", message.strip(), flags=re.IGNORECASE)
+    if len(parts) < 2 or len(parts) > 5:
+        return None
+    steps: list[dict[str, object]] = []
+    for part in parts:
+        system = plan_system_intent(part)
+        if system:
+            steps.append({"kind": "system", **system})
+            continue
+        window = plan_window_intent(part)
+        if window:
+            steps.append({"kind": "window", **window})
+            continue
+        return None
+    return steps if len(steps) == len(parts) else None
