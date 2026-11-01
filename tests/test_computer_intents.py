@@ -106,3 +106,14 @@ def test_system_intent_planner_recognizes_bounded_controls() -> None:
     assert plan_system_intent("Search Windows for physics notes")["payload"]["query"] == "physics notes"
     assert plan_system_intent("set volume to 150") is None
     assert plan_system_intent("turn off my computer") is None
+
+
+def test_multi_step_planner_requires_supported_bounded_steps() -> None:
+    from nova.core.computer.intents import plan_multi_step_intent
+
+    plan = plan_multi_step_intent("Set volume to 35 then change brightness to 60%")
+    assert plan is not None and len(plan) == 2
+    assert plan[0]["kind"] == "system"
+    assert plan[1]["kind"] == "system"
+    assert plan_multi_step_intent("Set volume to 35 then delete my files") is None
+    assert plan_multi_step_intent("Set volume to 35 then change brightness to 60 then search Windows for notes then set volume to 20 then change brightness to 30 then set volume to 10") is None
