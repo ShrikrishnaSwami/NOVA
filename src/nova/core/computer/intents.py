@@ -6,7 +6,7 @@ import re
 from typing import Iterable
 
 _OPEN_PREFIX = re.compile(
-    r"^(?:please\\s+)?(?:open|launch|start)\\s+(?:the\\s+)?(.+?)(?:\\s+please)?[.!?]*$",
+    r"^(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?(.+?)(?:\s+please)?[.!?]*$",
     re.IGNORECASE,
 )
 
