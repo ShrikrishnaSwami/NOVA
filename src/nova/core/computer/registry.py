@@ -14,8 +14,9 @@ from uuid import uuid4
 
 _WINDOWS_SETTINGS_ID = "windows-settings"
 _TEXT_SUFFIXES = {".txt", ".md", ".py", ".json", ".csv", ".log", ".yaml", ".yml", ".toml", ".ini"}
-_MAX_READ_BYTES = 64 * 1024
-_MAX_SEARCH_RESULTS = 200
+_MAX_READ_BYTES = 2 * 1024 * 1024
+_MAX_SEARCH_RESULTS = 500
+_TEXT_SUFFIXES.update({".html", ".htm", ".xml", ".sql", ".js", ".ts", ".tsx", ".jsx", ".css", ".java", ".c", ".cpp", ".h", ".hpp", ".ps1", ".bat", ".sh", ".rtf"})
 _MAX_APPLICATIONS = 2000
 
 
@@ -143,6 +144,26 @@ def _installed_registry_apps() -> list[dict[str, str]]:
     return list(results.values())
 
 
+def _accessible_computer_roots() -> list[Path]:
+    """Return ready local drive roots on Windows, or the user home elsewhere."""
+    roots: list[Path] = []
+    if os.name == "nt":
+        try:
+            import ctypes
+            mask = ctypes.windll.kernel32.GetLogicalDrives()
+            for index in range(26):
+                if mask & (1 << index):
+                    drive = Path(chr(65 + index) + ":" + os.sep)
+                    if drive.is_dir():
+                        roots.append(drive.resolve())
+        except (AttributeError, OSError):
+            pass
+    else:
+        home = Path.home()
+        if home.is_dir():
+            roots.append(home.resolve())
+    return roots
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -152,12 +173,14 @@ class ComputerToolError(ValueError):
 
 
 class ComputerToolRegistry:
-    """Small allowlisted tool registry. No shell, command strings, or arbitrary executables."""
+    """Permission-gated Windows discovery and file operations; no arbitrary shell commands."""
 
     def __init__(self, database_path: str | Path, allowed_roots: str = "") -> None:
         self.database_path = Path(database_path).expanduser()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        self.allowed_roots = self._parse_roots(allowed_roots)
+        configured_roots = self._parse_roots(allowed_roots)
+        self.access_scope = "configured_folders" if configured_roots else "accessible_drives"
+        self.allowed_roots = configured_roots or _accessible_computer_roots()
         self._initialize_audit()
 
     @staticmethod
@@ -246,8 +269,9 @@ class ComputerToolRegistry:
             "applications": applications,
             "application_count": len(applications),
             "file_roots": [str(root) for root in self.allowed_roots],
-            "actions": ["open_application", "list_directory", "search_files", "read_text_file"],
+            "actions": ["open_application", "open_path", "list_directory", "search_files", "search_file_contents", "read_text_file"],
             "file_access_enabled": bool(self.allowed_roots),
+            "access_scope": self.access_scope,
         }
 
     def _resolve_allowed_path(self, value: str, *, must_exist: bool = True) -> Path:
@@ -297,6 +321,12 @@ class ComputerToolRegistry:
                 else:
                     _start_shortcut(app_id)
                 result = {"message": f"Opened {app}."}
+            elif action == "open_path":
+                target = self._resolve_allowed_path(str(parameters.get("path", "")))
+                if os.name != "nt" or not hasattr(os, "startfile"):
+                    raise ComputerToolError("Opening paths through Windows Explorer is only available on Windows.")
+                os.startfile(str(target))
+                result = {"path": str(target), "message": f"Opened {target.name or target}."}
             elif action == "list_directory":
                 folder = self._resolve_allowed_path(str(parameters.get("path", "")))
                 if not folder.is_dir():
@@ -338,6 +368,34 @@ class ComputerToolRegistry:
                     if len(matches) >= _MAX_SEARCH_RESULTS:
                         break
                 result = {"root": str(root), "query": query, "matches": matches, "truncated": len(matches) >= _MAX_SEARCH_RESULTS}
+            elif action == "search_file_contents":
+                query = str(parameters.get("query", "")).strip().casefold()
+                if not query or len(query) > 200:
+                    raise ComputerToolError("Enter content to search for (1–200 characters).")
+                matches: list[dict[str, str]] = []
+                for root in self.allowed_roots:
+                    for current, directories, files in os.walk(root, followlinks=False):
+                        current_path = Path(current)
+                        directories[:] = [name for name in directories if not (current_path / name).is_symlink() and not (current_path / name).is_junction()]
+                        for name in files:
+                            candidate = current_path / name
+                            if candidate.suffix.lower() not in _TEXT_SUFFIXES or candidate.is_symlink():
+                                continue
+                            try:
+                                if candidate.stat().st_size > _MAX_READ_BYTES:
+                                    continue
+                                text = candidate.read_text(encoding="utf-8-sig", errors="ignore")
+                                if query in text.casefold():
+                                    matches.append({"path": str(candidate), "preview": text[:240].replace("\\n", " ")})
+                            except (OSError, UnicodeError):
+                                continue
+                            if len(matches) >= _MAX_SEARCH_RESULTS:
+                                break
+                        if len(matches) >= _MAX_SEARCH_RESULTS:
+                            break
+                    if len(matches) >= _MAX_SEARCH_RESULTS:
+                        break
+                result = {"query": query, "matches": matches, "truncated": len(matches) >= _MAX_SEARCH_RESULTS}
             elif action == "read_text_file":
                 file_path = self._resolve_allowed_path(str(parameters.get("path", "")))
                 if not file_path.is_file() or file_path.suffix.lower() not in _TEXT_SUFFIXES:
