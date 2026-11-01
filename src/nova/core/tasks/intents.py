@@ -18,6 +18,12 @@ def plan_task_intent(message: str, now: datetime | None = None) -> dict[str, Any
 
     if re.fullmatch(r"(?:please )?(?:open|show|manage) (?:my )?(?:scheduled tasks|task manager|schedule)", normalized):
         return {"kind": "open"}
+    if re.fullmatch(r"(?:please )?(?:open|show) (?:the )?computer controls", normalized):
+        return {"kind": "open_computer"}
+    if re.fullmatch(r"(?:please )?(?:open|show|manage) (?:my )?(?:memories|memory manager)", normalized):
+        return {"kind": "open_memory"}
+    if re.fullmatch(r"(?:please )?(?:open|show) (?:my )?(?:conversation )?history", normalized):
+        return {"kind": "open_history"}
     if re.fullmatch(r"(?:please )?(?:show|list|what are) (?:my )?(?:scheduled )?tasks", normalized) or normalized in {"what tasks do i have", "show my tasks"}:
         return {"kind": "list"}
 
