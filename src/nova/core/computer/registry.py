@@ -89,9 +89,9 @@ def _installed_registry_apps() -> list[dict[str, str]]:
 
     results: dict[str, dict[str, str]] = {}
     uninstall_roots = (
-        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
     )
     for hive, subkey in uninstall_roots:
         try:
@@ -117,8 +117,8 @@ def _installed_registry_apps() -> list[dict[str, str]]:
             continue
 
     app_path_roots = (
-        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\\Windows\\CurrentVersion\\App Paths"),
-        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
     )
     for hive, subkey in app_path_roots:
         try:
