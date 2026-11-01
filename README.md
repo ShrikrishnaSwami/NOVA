@@ -130,6 +130,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Response performance
 
-NOVA now exposes `POST /chat/stream` for server-sent token events, reuses its provider's HTTP connection pool between requests, and reports time-to-first-token and total-generation timing. The original `POST /chat` endpoint remains available.
+NOVA exposes `POST /chat/stream` for server-sent token events, reuses its provider's HTTP connection pool, and reports time-to-first-token and total-generation timing. The desktop batches stream updates to reduce UI overhead.
 
-Model residency is controlled by the local runtime, not NOVA's generic OpenAI-compatible adapter. If your runtime unloads idle models, enable its keep-loaded / auto-unload setting where available; the exact option depends on runtime and version.
+The default local-chat settings are tuned for responsiveness:
+
+- `NOVA_AI_MAX_TOKENS=512` limits generated output. Increase to 1024-2048 when you need longer explanations or code.
+- `NOVA_AI_CONTEXT_MESSAGES=8` limits the previous conversation history sent with each prompt.
+- `NOVA_AI_QWEN_NO_THINK=true` adds Qwen3's documented `/no_think` prompt switch for Qwen3 model IDs. Add `/think` to a message when you want deeper reasoning for that turn.
+- `NOVA_AI_TOP_P=0.8` uses Qwen3's recommended non-thinking sampling value.
+
+These settings are configurable in your private `.env`. Model residency is controlled by the local runtime, not NOVA's generic OpenAI-compatible adapter. If Bionic offers a keep-loaded or auto-unload setting, keep the model loaded while using NOVA. Actual token generation speed is still limited by the model, quantization, and available CPU/GPU acceleration.
