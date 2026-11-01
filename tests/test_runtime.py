@@ -31,6 +31,14 @@ def test_registry_requires_approval_and_rejects_unknown_tools():
     assert "SIMULATION ONLY" in result[0]["result"]["log"]["status"]
 
 
+def test_monitor_emits_alert_callback_without_breaking_sampling():
+    events = []
+    monitor = SystemStateMonitor(on_alert=events.append)
+    monitor._record_alert("cpu.high", "warning", "CPU utilization is high.")
+    assert events and events[0]["key"] == "cpu.high"
+    assert monitor.recent_alerts()[0]["message"] == "CPU utilization is high."
+
+
 def test_registry_validates_entire_chain_before_running():
     core = SimulationCore()
     registry = build_default_registry(core)

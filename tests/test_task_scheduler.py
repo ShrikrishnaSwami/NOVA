@@ -40,6 +40,22 @@ def test_recurring_task_is_rescheduled_after_success(tmp_path):
     assert datetime.fromisoformat(updated["schedule_at"]) > datetime.now(timezone.utc)
 
 
+def test_scheduler_emits_result_events_for_approved_tasks(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    task = _task(store)
+    store.approve(task["id"])
+    events = []
+    scheduler = TaskScheduler(
+        store,
+        handlers={"test.read": lambda _: {"status": "ready"}},
+        on_event=events.append,
+    )
+    scheduler.run_due(now=datetime.now(timezone.utc) + timedelta(days=1))
+    assert events[0]["type"] == "task.completed"
+    assert events[0]["status"] == "success"
+    assert events[0]["result"] == {"status": "ready"}
+
+
 def test_paused_task_does_not_execute(tmp_path):
     store = TaskStore(tmp_path / "tasks.sqlite3")
     task = _task(store)
