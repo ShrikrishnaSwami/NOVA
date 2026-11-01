@@ -41,3 +41,26 @@ def run_computer_action(request: ComputerActionRequest) -> dict[str, Any]:
 @router.get("/audit")
 def computer_audit(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
     return {"entries": _registry().list_audit(limit)}
+
+
+@router.get("/system")
+def computer_system_overview() -> dict[str, Any]:
+    from nova.core.computer.windows import foreground_window, system_overview
+    result = system_overview()
+    result["foreground_window"] = foreground_window()
+    return result
+
+
+@router.get("/processes")
+def computer_processes(limit: int = Query(default=100, ge=1, le=300)) -> dict[str, Any]:
+    from nova.core.computer.windows import list_processes
+    try:
+        return {"processes": list_processes(limit)}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/windows")
+def computer_windows(limit: int = Query(default=100, ge=1, le=300)) -> dict[str, Any]:
+    from nova.core.computer.windows import foreground_window, list_windows
+    return {"foreground": foreground_window(), "windows": list_windows(limit)}
