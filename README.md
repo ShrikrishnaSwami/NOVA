@@ -97,7 +97,7 @@ Memory policy:
 - Explicit `remember that ...` requests are saved.
 - Safe preferences, interests, and project facts may be saved automatically.
 - High-impact suggestions are marked pending until approved.
-- Credential and personal-identifier patterns are not saved.
+- Passwords, API keys, financial secrets, and government identifiers are never saved. Detected sensitive personal facts (such as health details or contact information) are held pending your approval.
 - Memories can be listed, approved, edited, and deleted through the API.
 
 Useful endpoints:
