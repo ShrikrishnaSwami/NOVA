@@ -72,7 +72,13 @@ The SQLite memory service sits beside the provider adapter and is independent of
 
 - The backend reuses one provider instance and asynchronous HTTPX connection pool, closed during FastAPI shutdown.
 - `POST /chat/stream` emits token events followed by `ttft_ms` and `total_ms`; `POST /chat` remains supported.
-- Keeping model weights resident is a model-runtime setting. There is no universal keep-alive parameter across OpenAI-compatible servers.
+- The desktop batches incoming stream fragments into short UI updates instead of repainting and scrolling for every fragment.
+- `NOVA_AI_MAX_TOKENS` bounds response generation (default 512); raise it for longer answers.
+- `NOVA_AI_CONTEXT_MESSAGES` bounds previous conversation context (default 8 messages; maximum 20).
+- For model IDs containing `qwen3`, `NOVA_AI_QWEN_NO_THINK=true` adds Qwen's documented `/no_think` prompt switch. A user can request reasoning for an individual turn with `/think`.
+- `NOVA_AI_TOP_P` defaults to 0.8, matching Qwen3's recommended non-thinking sampling settings.
+- Keeping model weights resident is a model-runtime setting. There is no universal keep-alive parameter across OpenAI-compatible servers; configure Bionic's model unloading/residency setting if available.
+- These controls reduce prompt and output work but cannot overcome the CPU throughput limit of a small local machine.
 
 
 ## Persistent memory
