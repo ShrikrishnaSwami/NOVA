@@ -92,7 +92,7 @@ You can also use the backend without the desktop client:
 
 ## Local voice (optional)
 
-NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice]"`.
+NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice,windows]"`.
 
 ## Persistent memory
 
@@ -188,7 +188,7 @@ NOVA's first deterministic computer planner can route requests such as:
 - "Read C:\\Users\\you\\Documents\\notes.txt" — ask before reading; content is displayed locally and is not sent to the model.
 - "List files in C:\\Users\\you\\Documents" — ask before listing a folder.
 
-Every planned action is reviewed through a one-action confirmation dialog. The planner is intentionally deterministic at this stage: it does not execute model-generated commands, and it does not yet perform multi-step autonomous workflows.
+Every planned action is reviewed through a one-action confirmation dialog. The planner is intentionally deterministic at this stage: it does not execute model-generated commands, and it supports bounded multi-step plans for recognized Windows system and window actions. Every step is confirmed separately; the plan stops immediately if a step is cancelled or fails.
 
 
 ## Windows OS awareness (first integration layer)
@@ -205,7 +205,11 @@ NOVA exposes read-only information about the current Windows session:
 Process and resource metrics use the core psutil dependency. Window enumeration uses the Windows API directly. These endpoints do not terminate processes, inject input, capture screenshots, or bypass Windows permissions. The desktop also exposes a confirmed **Control a window** action: choose a visible window, then explicitly approve focusing/switching to it, minimizing, restoring, or maximizing it. The API supports only those four operations; it does not close apps or inject keyboard/mouse input. Window controls are Windows-only and require the target to remain a visible top-level window.
 NOVA can also handle `set volume to 35`, `change brightness to 70%`, and `search Windows for physics notes`. Each is parsed into a fixed typed operation and confirmed before execution. Volume adjustment uses the optional `pycaw` Windows audio extra; install it with `pip install -e ".[windows]"`. Brightness control uses the Windows WMI interface and may not work with external monitors or every laptop panel. Windows Search opens the native indexed-search experience in Explorer; NOVA does not scrape or bypass its index.
 
-The **Interact with an app** control uses Windows UI Automation (optional `pywinauto`) to inspect supported accessible controls in an open window. It can activate a single named enabled button, tab, menu item, hyperlink, checkbox, or radio button after a separate confirmation. It does not type into fields, read document contents, or execute arbitrary app scripts. Some applications expose few or no accessible controls.
+The **Interact with an app** control uses Windows UI Automation (optional `pywinauto`) to inspect supported accessible controls in an open window. It can activate a single named enabled button, tab, menu item, hyperlink, checkbox, or radio button after a separate confirmation. The **Enter text into an app** control can enter up to 2,000 characters into one uniquely named, visible, enabled, non-password text field after confirmation. Password fields are excluded; entered text is not written to the audit log. Some applications expose few or no accessible controls.
+
+NOVA now integrates with the Windows shell: it can minimize to the notification area, reopen with the global `Ctrl+Alt+Space` shortcut, optionally register itself to start at sign-in under the current user's Run key, and show native Windows toast notifications when a reply arrives while hidden. Right-click the tray icon to open NOVA, toggle startup, send a test notification, or quit. Closing the main window hides NOVA in the tray; use **Quit NOVA** to fully exit.
+
+The Computer Controls panel also offers opt-in battery/power event monitoring. It checks battery level and charging state once per minute while the panel is open, and can notify at 20% or below or when the power connection changes. This is polling-based and is not a subscription to all Windows event channels. It stops when the panel closes.
 
 The Computer Controls panel also offers temporary active-app awareness. It is off by default, polls the foreground window title only after you opt in, stops when the panel closes, and does not save titles or send them to the AI.
 
