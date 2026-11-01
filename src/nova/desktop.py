@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import subprocess
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -263,6 +264,7 @@ class NovaWindow(QMainWindow):
         self._quit_requested = False
         self._tray_available = False
         self._hotkey_registered = False
+        self._backend_process = None
         self.history: list[dict[str, str]] = []
         self.conversation_id = str(uuid4())
         self.worker: ApiWorker | None = None
@@ -276,6 +278,7 @@ class NovaWindow(QMainWindow):
         self._stream_flush_timer.timeout.connect(self._flush_stream_tokens)
         self._build_ui()
         self._setup_windows_shell()
+        self._ensure_backend_process()
         self._check_status()
 
         self.status_timer = QTimer(self)
@@ -880,6 +883,54 @@ class NovaWindow(QMainWindow):
 
 
 
+    def _ensure_backend_process(self) -> None:
+        """Start a private loopback backend only when one is not already healthy."""
+        try:
+            response = _HTTP_CLIENT.get(f"{API_ROOT}/health", timeout=0.6)
+            if response.is_success:
+                return
+        except Exception:
+            pass
+        settings = get_settings()
+        if settings.host not in {"127.0.0.1", "localhost"}:
+            self.connection_label.setText("Backend auto-start disabled: NOVA must bind to loopback.")
+            return
+        if API_ROOT not in {
+            f"http://127.0.0.1:{settings.port}",
+            f"http://localhost:{settings.port}",
+        }:
+            self.connection_label.setText("Backend auto-start skipped because NOVA_API_URL points to a different server.")
+            return
+        project_root = Path(__file__).resolve().parents[2]
+        command = [
+            sys.executable, "-m", "uvicorn", "nova.main:app",
+            "--host", settings.host, "--port", str(settings.port),
+            "--no-access-log",
+        ]
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            self._backend_process = subprocess.Popen(
+                command,
+                cwd=str(project_root),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+            )
+            self.connection_label.setText("Starting NOVA's local backend…")
+        except Exception as exc:
+            self._backend_process = None
+            self.connection_label.setText(f"Could not start NOVA's backend automatically: {exc}")
+
+    def _stop_owned_backend(self) -> None:
+        process = self._backend_process
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+        self._backend_process = None
+
     def _setup_windows_shell(self) -> None:
         if os.name != "nt":
             return
@@ -950,6 +1001,7 @@ class NovaWindow(QMainWindow):
 
     def _quit_nova(self) -> None:
         self._quit_requested = True
+        self._stop_owned_backend()
         if self._hotkey_registered:
             try:
                 import ctypes
