@@ -78,6 +78,12 @@ class ComputerControlsDialog(QDialog):
             system_controls.addWidget(button)
         layout.addLayout(system_controls)
 
+        automation_row = QHBoxLayout()
+        interact_button = QPushButton("Interact with an app")
+        interact_button.clicked.connect(self.interact_with_app)
+        automation_row.addWidget(interact_button)
+        layout.addLayout(automation_row)
+
         self.foreground_timer = QTimer(self)
         self.foreground_timer.setInterval(2000)
         self.foreground_timer.timeout.connect(self._poll_foreground)
@@ -467,3 +473,49 @@ class ComputerControlsDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Windows action failed", str(exc))
         return None
+
+
+    def interact_with_app(self) -> None:
+        try:
+            windows = self.request("GET", "/computer/windows?limit=200").get("windows", [])
+            if not windows:
+                QMessageBox.information(self, "No open apps", "NOVA could not find visible titled application windows.")
+                return
+            labels = [f"{item.get('title')} · PID {item.get('pid')}" for item in windows]
+            selected, accepted = QInputDialog.getItem(self, "Choose application", "Inspect controls in:", labels, 0, False)
+            if not accepted:
+                return
+            target = windows[labels.index(selected)]
+            controls = self.request("GET", f"/computer/windows/{target['handle']}/controls?limit=200").get("controls", [])
+            if not controls:
+                QMessageBox.information(self, "No supported controls", "This app exposes no enabled visible buttons, tabs, menu items, links, checkboxes, or radio buttons through Windows UI Automation.")
+                return
+            control_labels = [f"{item['name']}  ·  {item['control_type']}" for item in controls]
+            chosen, accepted = QInputDialog.getItem(self, "Choose app control", "NOVA can activate one named control:", control_labels, 0, False)
+            if not accepted:
+                return
+            control = controls[control_labels.index(chosen)]
+            answer = QMessageBox.question(
+                self, "Approve app interaction?",
+                f"NOVA will activate this control in {target.get('title')}:\n\n{control['name']} ({control['control_type']})\n\nAllow this one click?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            result = self.request(
+                "POST", "/computer/windows/controls/actions",
+                json={
+                    "handle": target["handle"], "name": control["name"],
+                    "control_type": control["control_type"], "approved": True,
+                },
+            )
+            self.status.setText(result.get("message", "Application control activated."))
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = exc.response.json().get("detail", str(exc))
+            except ValueError:
+                detail = str(exc)
+            QMessageBox.warning(self, "App interaction blocked", str(detail))
+        except Exception as exc:
+            QMessageBox.warning(self, "App interaction unavailable", str(exc))
