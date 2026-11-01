@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
+from nova.core.computer.intents import match_open_application_command
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -455,6 +456,33 @@ class NovaWindow(QMainWindow):
         message = self.input.text().strip()
         if not message or (self.worker and self.worker.isRunning()):
             return
+
+        # Handle only exact, deterministic allowlisted app-launch commands locally.
+        # All other messages continue through the normal AI chat pipeline.
+        requested_app = match_open_application_command(message)
+        if requested_app:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            dialog = ComputerControlsDialog(self)
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            result = dialog.execute(
+                "open_application",
+                {"app": requested_app},
+                f"open {requested_app}",
+            )
+            reply = (
+                f"Opened {requested_app.title()}."
+                if result
+                else f"I didn't open {requested_app.title()}. The action was cancelled or blocked."
+            )
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
+            return
+
         self.input.clear()
         self._add_message("YOU", message)
         self.history.append({"role": "user", "content": message})
