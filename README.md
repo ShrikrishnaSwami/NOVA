@@ -6,14 +6,14 @@ The project is in active early development. The current release includes a local
 
 ## Current capabilities
 
-- Local FastAPI backend bound to `127.0.0.1`.
+- Local FastAPI service bound to `127.0.0.1`, managed by the Windows desktop session.
 - Health endpoint at `/health`.
 - Interactive API documentation at `/docs`.
 - Chat endpoint at `/chat`.
 - Provider status at `/system/ai`.
 - Echo setup mode that works without model credentials.
 - OpenAI-compatible adapter for local model servers and compatible hosted APIs.
-- Optional PySide6 desktop client with animated NOVA visual, chat, and backend/model status.
+- PySide6 Windows desktop client with tray lifecycle, single-instance lock, global hotkey, background startup, and managed local API process.
 - Optional local push-to-talk speech recognition and operating-system text-to-speech.
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
@@ -48,6 +48,21 @@ If PowerShell blocks activation, run this in the same terminal:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
+
+## Windows desktop installer
+
+A per-user Windows installer is built by the **Windows installer** GitHub Actions workflow. Open the repository's Actions tab, run **Windows installer**, and download the `NOVA-Windows-Installer` artifact when the workflow completes. Tagged releases (`v*`) also publish the installer as a GitHub Release asset.
+
+The installer:
+- Installs under the current user's `%LOCALAPPDATA%\\Programs\\NOVA` directory and does not require administrator privileges.
+- Creates Start Menu shortcuts and optionally a desktop shortcut.
+- Copies the example configuration to `%APPDATA%\\NOVA\\.env` only on first install, preserving any existing settings.
+- Keeps SQLite memory under `%LOCALAPPDATA%\\NOVA`, separate from the installed application.
+- Can be uninstalled through Windows Settings → Apps → Installed apps.
+
+The installed application runs in the signed-in user's desktop session. It is not a privileged Windows service: desktop UI Automation and notification APIs need the interactive user's session. NOVA starts a separate loopback-only API process when needed and stops only the process it owns when you explicitly quit.
+
+After installation, open **NOVA → Open NOVA settings** from the tray menu to edit the per-user `.env` file. The default template is configured for the local Bionic OpenAI-compatible endpoint at `http://127.0.0.1:1235/v1` with model `qwen3-1.7b`. Start Bionic and load that model before asking NOVA to use local AI. If your local runtime uses a different model or port, update the settings file and restart NOVA.
 
 ## Configure a local model
 
@@ -96,6 +111,8 @@ You can also use the backend without the desktop client:
 
 NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice,windows]"`.
 
+NOVA's installed configuration is read from `%APPDATA%\\NOVA\\.env` on Windows. Environment variables still override values in that file. Development checkouts continue to use a project-local `.env` when no per-user settings file exists.
+
 ## Persistent memory
 
 NOVA stores its conversation history and long-term memories in a local SQLite database. By default the database is created at `~/.nova/nova_memory.sqlite3`; override it with `NOVA_MEMORY_DB_PATH` in your private `.env` file.
@@ -142,6 +159,17 @@ Useful endpoints:
 - `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
 - `POST /computer/actions` — execute one registered action after approval.
 - `GET /computer/audit` — inspect recent local action records.
+
+### Windows session integration and automation
+
+- NOVA starts in the current signed-in user's desktop session, keeps one instance per user, and can run hidden in the notification area.
+- `Ctrl+Alt+Space` reopens the UI; closing the window hides it, while **Quit NOVA** stops the desktop and its own API child process.
+- Optional sign-in startup is controlled from the tray menu and writes only the current user's NOVA startup entry.
+- Native toast notifications can be tested from the tray menu. Windows may still require notifications to be enabled in **Settings → System → Notifications**.
+- The shared automation engine publishes its bounded action contracts at `GET /computer/automation/capabilities`. Multi-step plans are validated as a whole, capped at five steps, and stop after the first cancelled or failed action.
+- Battery and active-window awareness are opt-in and session-scoped.
+
+NOVA does not currently read the notification contents belonging to other Windows applications. Windows' notification-listener API requires a packaged application identity and the restricted `userNotificationListener` capability, plus explicit OS user consent. The current per-user Inno Setup installer does not grant that capability; reading other apps' notifications is deliberately not simulated or silently enabled.
 
 ## Local model benchmarking
 
