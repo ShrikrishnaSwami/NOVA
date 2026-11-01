@@ -6,6 +6,7 @@ import os
 import json
 
 import httpx
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QListWidget, QMessageBox, QPushButton,
     QVBoxLayout, QInputDialog,
@@ -64,6 +65,24 @@ class ComputerControlsDialog(QDialog):
         control_windows.clicked.connect(self.control_window)
         window_actions.addWidget(control_windows)
         layout.addLayout(window_actions)
+
+        system_controls = QHBoxLayout()
+        for label, callback in (
+            ("Set volume", self.set_volume),
+            ("Set brightness", self.set_brightness),
+            ("Windows Search", self.windows_search),
+            ("Watch active app", self.toggle_foreground_watch),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            system_controls.addWidget(button)
+        layout.addLayout(system_controls)
+
+        self.foreground_timer = QTimer(self)
+        self.foreground_timer.setInterval(2000)
+        self.foreground_timer.timeout.connect(self._poll_foreground)
+        self._last_foreground_title = None
+        self._foreground_watch_enabled = False
 
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
@@ -327,3 +346,99 @@ class ComputerControlsDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Window control unavailable", str(exc))
         return None
+
+
+    def set_volume(self) -> None:
+        percent, accepted = QInputDialog.getInt(self, "System volume", "Set master volume (0–100%):", 35, 0, 100)
+        if not accepted:
+            return
+        answer = QMessageBox.question(
+            self, "Approve volume change?", f"Set Windows master volume to {percent}%?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self.request("POST", "/computer/system/volume",
+                                  json={"percent": percent, "approved": True})
+            self.status.setText(result.get("message", "Volume updated."))
+        except Exception as exc:
+            QMessageBox.warning(self, "Volume control unavailable", str(exc))
+
+    def set_brightness(self) -> None:
+        percent, accepted = QInputDialog.getInt(self, "Display brightness", "Set internal display brightness (0–100%):", 60, 0, 100)
+        if not accepted:
+            return
+        answer = QMessageBox.question(
+            self, "Approve brightness change?", f"Set supported display brightness to {percent}%?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self.request("POST", "/computer/system/brightness",
+                                  json={"percent": percent, "approved": True})
+            self.status.setText(result.get("message", "Brightness update requested."))
+        except Exception as exc:
+            QMessageBox.warning(self, "Brightness control unavailable", str(exc))
+
+    def windows_search(self) -> None:
+        query, accepted = QInputDialog.getText(self, "Windows Search", "Search Windows-indexed files, apps, and settings for:")
+        if not accepted or not query.strip():
+            return
+        answer = QMessageBox.question(
+            self, "Open Windows Search?",
+            f"NOVA will open the native Windows Search results for:\n\n{query.strip()}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self.request("POST", "/computer/windows/search",
+                                  json={"query": query.strip(), "approved": True})
+            self.status.setText(result.get("message", "Windows Search opened."))
+        except Exception as exc:
+            QMessageBox.warning(self, "Windows Search unavailable", str(exc))
+
+    def toggle_foreground_watch(self) -> None:
+        if self._foreground_watch_enabled:
+            self.foreground_timer.stop()
+            self._foreground_watch_enabled = False
+            self.status.setText("Active-app awareness paused. No further window polling.")
+            return
+        answer = QMessageBox.question(
+            self, "Enable active-app awareness?",
+            "While this dialog remains open, NOVA will check the foreground window title every 2 seconds and show changes here. Titles stay local and are not sent to the AI or saved. Enable this temporary monitor?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._foreground_watch_enabled = True
+        self._last_foreground_title = None
+        self.foreground_timer.start()
+        self.status.setText("Active-app awareness enabled for this dialog only. Click again to pause.")
+
+    def _poll_foreground(self) -> None:
+        if not self._foreground_watch_enabled:
+            return
+        try:
+            data = self.request("GET", "/computer/system")
+            foreground = data.get("foreground_window") or {}
+            title = str(foreground.get("title") or "(no titled foreground window)")
+            if title != self._last_foreground_title:
+                self._last_foreground_title = title
+                self.output.addItem("Active window changed: " + title)
+                self.status.setText("Temporary active-app awareness is running. Window titles remain local.")
+        except Exception as exc:
+            self.status.setText(f"Active-app monitor paused after an error: {exc}")
+            self.foreground_timer.stop()
+            self._foreground_watch_enabled = False
+
+    def closeEvent(self, event) -> None:
+        self.foreground_timer.stop()
+        self._foreground_watch_enabled = False
+        super().closeEvent(event)
