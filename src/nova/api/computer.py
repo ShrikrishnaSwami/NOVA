@@ -175,3 +175,34 @@ def activate_window_control(request: UIControlActionRequest) -> dict[str, Any]:
     except UIAutomationError as exc:
         _registry()._audit("activate_ui_control", {}, "blocked", str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+
+@router.get("/windows/{handle}/editable-fields")
+def inspect_window_editable_fields(handle: int, limit: int = Query(default=50, ge=1, le=100)) -> dict[str, Any]:
+    from nova.core.computer.ui_automation import UIAutomationError, list_editable_fields
+    try:
+        return {"fields": list_editable_fields(handle, limit)}
+    except UIAutomationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class UITextEntryRequest(BaseModel):
+    handle: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=2000)
+    approved: bool = False
+
+
+@router.post("/windows/controls/text")
+def enter_application_text(request: UITextEntryRequest) -> dict[str, Any]:
+    if not request.approved:
+        raise HTTPException(status_code=403, detail="Entering text into an application requires explicit approval.")
+    from nova.core.computer.ui_automation import UIAutomationError, enter_text_in_field
+    try:
+        result = enter_text_in_field(request.handle, request.name, request.text)
+        _registry()._audit("enter_ui_text", {"field": request.name}, "success", "Entered user-approved text; contents omitted.")
+        return result
+    except UIAutomationError as exc:
+        _registry()._audit("enter_ui_text", {"field": request.name}, "blocked", str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
