@@ -26,6 +26,7 @@ RestartApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
+Name: "startup"; Description: "Start NOVA automatically when you sign in to Windows (runs in the notification area)"; GroupDescription: "Startup:"; Flags: checkedonce
 
 [Files]
 Source: "..\dist\NOVA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
