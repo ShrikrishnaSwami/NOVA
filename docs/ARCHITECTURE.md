@@ -16,7 +16,13 @@ NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional 
 - The backend URL can be overridden with `NOVA_API_URL`.
 - Optional voice input runs Vosk in a worker thread and reads audio only after the user clicks Talk; optional speech output uses local Windows SAPI voices through pyttsx3.
 - Voice dependencies are isolated in the `voice` extra, and the Vosk model is downloaded separately and configured with `NOVA_VOSK_MODEL_PATH`.
-- Computer controls discover `.lnk` application shortcuts in the current-user and all-users Windows Start Menus. Exact app-name requests are matched against that live catalogue and require per-launch confirmation; file operations remain limited to configured roots.
+- Computer controls discover Start Menu shortcuts, registered Windows Start Apps, classic uninstall registry entries, install locations, and App Paths. Direct app-launch requests are matched against the live catalogue; ambiguous matches are presented for user selection. Launching delegates to the Windows Shell and requires per-launch confirmation.
+- When no explicit `NOVA_COMPUTER_ALLOWED_ROOTS` are configured, the backend discovers ready local drives and scopes file operations to paths the current Windows account can access. Search skips inaccessible directories, symbolic links, and junctions.
+- Text and code files can be searched/read locally. The optional `documents` dependency group adds bounded extraction for PDF, DOCX, XLSX, and XLSM files. No document content is sent to the model unless a later, explicit chat workflow chooses to include it.
+
+## Windows document extraction
+
+`src/nova/core/computer/registry.py` routes document extraction by file extension. PDF uses `pypdf`, Word uses `python-docx`, and Excel uses `openpyxl`; these are optional, free, local dependencies installed with `pip install -e ".[documents]"`. Extraction is bounded by file size, page/sheet/row limits, and output character limits. Search results expose short previews; full document text is shown locally in the computer controls dialog. OCR, legacy binary `.doc`, and persistent Windows Search indexing are not yet implemented.
 
 ## AI provider layer
 
