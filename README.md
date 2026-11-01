@@ -14,7 +14,7 @@ The project is in active development. NOVA includes a local FastAPI service, pro
 - Echo setup mode that works without model credentials.
 - OpenAI-compatible adapter for local model servers and compatible hosted APIs.
 - PySide6 Windows desktop client with tray lifecycle, single-instance lock, global hotkey, background startup, and managed local API process.
-- Optional local push-to-talk speech recognition and operating-system text-to-speech.
+- Local push-to-talk and opt-in "Hey NOVA" wake-word voice sessions, with interruptible local speech output.
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
@@ -59,6 +59,8 @@ The installer:
 - Creates Start Menu shortcuts and optionally a desktop shortcut.
 - Copies the example configuration to `%APPDATA%\\NOVA\\.env` only on first install, preserving any existing settings.
 - Keeps SQLite memory under `%LOCALAPPDATA%\\NOVA`, separate from the installed application.
+- Offers automatic sign-in startup in the notification area, so NOVA and its local database/scheduler can start without opening a terminal or the main interface.
+- Bundles the small offline Vosk English model used by hands-free voice mode.
 - Can be uninstalled through Windows Settings → Apps → Installed apps.
 
 The installed application runs in the signed-in user's desktop session. It is not a privileged Windows service: desktop UI Automation and notification APIs need the interactive user's session. Notification preferences are stored locally in `%APPDATA%\\NOVA\\preferences.json`. NOVA starts a separate loopback-only API process when needed and stops only the process it owns when you explicitly quit.
@@ -122,7 +124,7 @@ Useful endpoints:
 
 ## Local voice (optional)
 
-NOVA can transcribe microphone input locally with Vosk and read responses aloud using the installed Windows speech voices through pyttsx3. Voice input is push-to-talk; it does not continuously listen or use a wake word. Audio is processed on the device and is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for installation and model setup. Install the optional dependencies with `pip install -e ".[desktop,voice,windows]"`.
+NOVA can transcribe microphone input locally with Vosk and read responses aloud using installed Windows speech voices through pyttsx3. The installed Windows build bundles its small Vosk model. "Hey NOVA" wake-word listening is opt-in, visibly indicated, saved locally, and can be disabled from the composer. When enabled, NOVA can start hidden at Windows sign-in, listen locally, interrupt speech playback, capture a command, and speak the response. Push-to-talk remains available. Audio is not sent to a cloud speech service. See [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md) for details.
 
 NOVA's installed configuration is read from `%APPDATA%\\NOVA\\.env` on Windows. Environment variables still override values in that file. Development checkouts continue to use a project-local `.env` when no per-user settings file exists.
 
