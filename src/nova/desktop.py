@@ -281,6 +281,7 @@ class NovaWindow(QMainWindow):
         self._skip_tool_planning = False
         self._pending_tool_message = ""
         self._pending_tool_calls: list[dict[str, Any]] = []
+        self.tool_worker: ApiWorker | None = None
         self.wake_session = None
         self.wake_thread = None
         self._stream_flush_timer = QTimer(self)
@@ -933,11 +934,10 @@ class NovaWindow(QMainWindow):
             self.send_button.setEnabled(False)
             self.send_button.setText("Planning…")
             self.connection_label.setText("NOVA is considering its registered capabilities…")
-            self.worker = ApiWorker("/runtime/tools/plan", {"message": message})
-            self.worker.completed.connect(self._tool_plan_completed)
-            self.worker.failed.connect(self._tool_plan_failed)
-            self.worker.finished.connect(self._tool_plan_finished)
-            self.worker.start()
+            self.tool_worker = ApiWorker("/runtime/tools/plan", {"message": message})
+            self.tool_worker.completed.connect(self._tool_plan_completed)
+            self.tool_worker.failed.connect(self._tool_plan_failed)
+            self.tool_worker.start()
             return
 
         self._skip_tool_planning = False
@@ -976,15 +976,21 @@ class NovaWindow(QMainWindow):
             self._add_message("NOVA", "Understood. I haven't executed those actions.")
             self.history.append({"role": "assistant", "content": "Understood. I haven't executed those actions."})
             self.connection_label.setText("Tool actions declined.")
+            self.send_button.setEnabled(True)
+            self.send_button.setText("Send  ↗")
             return
         self.send_button.setEnabled(False)
         self.send_button.setText("Executing…")
         self.connection_label.setText("Executing approved registered actions…")
-        self.worker = ApiWorker("/runtime/tools/execute", {"calls": calls, "approved": True})
-        self.worker.completed.connect(self._tool_execute_completed)
-        self.worker.failed.connect(self._request_failed)
-        self.worker.finished.connect(self._request_finished)
-        self.worker.start()
+        self.tool_worker = ApiWorker("/runtime/tools/execute", {"calls": calls, "approved": True})
+        self.tool_worker.completed.connect(self._tool_execute_completed)
+        self.tool_worker.failed.connect(self._tool_execute_failed)
+        self.tool_worker.start()
+
+    def _tool_execute_failed(self, message: str) -> None:
+        self._request_failed(message)
+        self.send_button.setEnabled(True)
+        self.send_button.setText("Send  ↗")
 
     def _tool_execute_completed(self, data: dict) -> None:
         results = data.get("results", [])
