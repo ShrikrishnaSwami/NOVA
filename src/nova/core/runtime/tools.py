@@ -1,0 +1,133 @@
+"""Typed tool registry for bounded, auditable NOVA function execution.
+
+This is a small agent runtime foundation, not an unrestricted Python or shell
+execution facility. Simulation tools report simulated state only.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Callable
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSpec:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    handler: Callable[[dict[str, Any]], dict[str, Any]]
+    simulation: bool = False
+
+
+class ToolRegistry:
+    def __init__(self) -> None:
+        self._tools: dict[str, ToolSpec] = {}
+
+    def register(self, spec: ToolSpec) -> None:
+        if spec.name in self._tools:
+            raise ValueError(f"Tool already registered: {spec.name}")
+        self._tools[spec.name] = spec
+
+    def describe(self) -> list[dict[str, Any]]:
+        return [{
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+            "simulation": tool.simulation,
+        } for tool in self._tools.values()]
+
+    def execute_chain(self, calls: list[dict[str, Any]], *, approved: bool = False) -> list[dict[str, Any]]:
+        if not calls or len(calls) > 5:
+            raise ValueError("A tool chain must contain between one and five calls.")
+        # Validate every call before executing any call.
+        validated: list[tuple[ToolSpec, dict[str, Any]]] = []
+        for call in calls:
+            name = str(call.get("name", ""))
+            tool = self._tools.get(name)
+            if tool is None:
+                raise ValueError(f"Unregistered tool: {name}")
+            arguments = call.get("arguments", {})
+            if not isinstance(arguments, dict):
+                raise ValueError(f"Arguments for {name} must be an object.")
+            required = tool.parameters.get("required", [])
+            properties = tool.parameters.get("properties", {})
+            if set(arguments) - set(properties):
+                raise ValueError(f"Unknown argument supplied to {name}.")
+            if any(key not in arguments for key in required):
+                raise ValueError(f"Missing required argument for {name}.")
+            validated.append((tool, arguments))
+        if not approved:
+            raise PermissionError("Tool chain requires explicit approval.")
+        results = []
+        for tool, arguments in validated:
+            result = tool.handler(arguments)
+            results.append({"tool": tool.name, "simulation": tool.simulation, "result": result})
+        return results
+
+
+class SimulationCore:
+    """Deterministic in-memory mock subsystems; no physical interfaces exist."""
+
+    def __init__(self) -> None:
+        self.state: dict[str, Any] = {
+            "aerospace": {"mode": "standby", "altitude_km": 0, "status": "SIMULATED"},
+            "smart_grid": {"routing": "balanced", "load_percent": 42, "status": "SIMULATED"},
+            "thermal": {"profile": "nominal", "temperature_c": 22.0, "status": "SIMULATED"},
+            "holographics": {"projection": "idle", "diagnostics": "ready", "status": "SIMULATED"},
+        }
+        self.logs: list[dict[str, Any]] = []
+
+    def command(self, subsystem: str, operation: str) -> dict[str, Any]:
+        if subsystem not in self.state:
+            raise ValueError("Unknown simulation subsystem.")
+        allowed = {
+            "aerospace": {"diagnostics", "standby", "engage_simulation"},
+            "smart_grid": {"diagnostics", "balance_simulation"},
+            "thermal": {"diagnostics", "cooling_simulation"},
+            "holographics": {"diagnostics", "project_simulation", "clear_simulation"},
+        }
+        if operation not in allowed[subsystem]:
+            raise ValueError("Operation is not available for this simulation subsystem.")
+        target = self.state[subsystem]
+        if operation == "standby":
+            target["mode"] = "standby"
+        elif operation == "engage_simulation":
+            target["mode"] = "simulated_engaged"
+        elif operation == "balance_simulation":
+            target["routing"] = "balanced"
+        elif operation == "cooling_simulation":
+            target["profile"] = "cooling_simulation"
+        elif operation == "project_simulation":
+            target["projection"] = "active_simulation"
+        elif operation == "clear_simulation":
+            target["projection"] = "idle"
+        entry = {
+            "subsystem": subsystem,
+            "operation": operation,
+            "status": "SIMULATION ONLY — no physical system was controlled",
+        }
+        self.logs.append(entry)
+        self.logs = self.logs[-100:]
+        return {"state": dict(target), "log": entry}
+
+
+def build_default_registry(simulation: SimulationCore | None = None) -> ToolRegistry:
+    core = simulation or SimulationCore()
+    registry = ToolRegistry()
+    for subsystem, operations in {
+        "aerospace": ["diagnostics", "standby", "engage_simulation"],
+        "smart_grid": ["diagnostics", "balance_simulation"],
+        "thermal": ["diagnostics", "cooling_simulation"],
+        "holographics": ["diagnostics", "project_simulation", "clear_simulation"],
+    }.items():
+        registry.register(ToolSpec(
+            name=f"simulation.{subsystem}",
+            description=f"Run a labelled simulation operation for the {subsystem} mock subsystem.",
+            parameters={
+                "type": "object",
+                "properties": {"operation": {"type": "string", "enum": operations}},
+                "required": ["operation"],
+            },
+            handler=lambda args, subsystem=subsystem: core.command(subsystem, args["operation"]),
+            simulation=True,
+        ))
+    return registry
