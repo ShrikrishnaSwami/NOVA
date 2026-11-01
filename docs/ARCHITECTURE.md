@@ -134,3 +134,14 @@ The optional windows dependency group installs pycaw for master audio control. C
 ## Application UI Automation boundary
 
 The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attaches to an existing visible top-level window by its enumerated HWND. It exposes only enabled, visible Button, TabItem, MenuItem, Hyperlink, CheckBox, and RadioButton controls with accessible names. Activation requires an exact name and control type that resolve to exactly one current control, plus explicit desktop/API approval. It does not send arbitrary text, read edit controls, execute scripts, or operate on unlisted windows. UI Automation availability depends on the target application's accessibility tree; some apps expose incomplete controls.
+
+
+## Windows shell integration and event-driven workflows
+
+The PySide6 desktop registers a Windows notification-area icon, hides to the tray on close, and exits only through the tray Quit command. Ctrl+Alt+Space is registered through RegisterHotKey (no global keyboard hook); it brings NOVA forward. A current-user startup option writes only the NOVA value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run and can be removed from the same menu. Native toast notifications use the optional winotify adapter. Replies received while NOVA is hidden can generate a toast.
+
+Computer Controls provides opt-in battery and power-state monitoring. It polls psutil battery telemetry once per minute only while the dialog is open; it reports plug/unplug changes and one low-battery alert per low-battery episode. This is not a general Windows event subscription and it does not inspect notifications belonging to other applications.
+
+A bounded multi-step planner accepts up to five `then`-chained system/window actions. The entire chain is validated before execution, then each step requires its own confirmation. A cancelled, failed, or unresolved step halts the chain. Unsupported steps invalidate the plan; model-generated text is never executed as code.
+
+UI Automation supports exact-name activation of a small set of visible controls and, separately, text entry into one uniquely named visible enabled non-password Edit control. Text entry is limited to 2,000 characters, requires explicit approval, and the text itself is omitted from audit parameters. Password fields and arbitrary keyboard injection are excluded.
