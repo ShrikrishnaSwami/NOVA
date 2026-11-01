@@ -12,6 +12,8 @@ _OPEN_APP_PATTERN = re.compile(
 )
 
 _APP_ALIASES = {
+    "windows settings": "windows settings",
+    "settings": "windows settings",
     "calc": "calculator",
     "calculator": "calculator",
     "notepad": "notepad",
