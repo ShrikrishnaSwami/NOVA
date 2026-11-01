@@ -171,10 +171,14 @@ class MemoryStore:
             match = next((pattern.search(text) for pattern in _AUTO_PATTERNS if pattern.search(text)), None)
             if not match:
                 important = _IMPORTANT.search(text)
-                if not important:
+                if important:
+                    content = text.strip()
+                    status, source, category = "pending", "automatic-review", "important"
+                elif requires_approval:
+                    content = text.strip()
+                    status, source, category = "pending", "sensitive-review", "sensitive"
+                else:
                     return None
-                content = text.strip()
-                status, source, category = "pending", "automatic-review", "important"
             else:
                 content = text.strip()
                 status, source = "approved", "automatic"
