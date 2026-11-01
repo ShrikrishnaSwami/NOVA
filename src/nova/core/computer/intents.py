@@ -183,3 +183,25 @@ def plan_os_query(message: str) -> dict[str, str] | None:
     if re.search(r"\b(system info|system information|computer specs|pc specs|about this computer|system overview)\b", normalized):
         return {"endpoint": "/computer/system", "kind": "system"}
     return None
+
+
+
+def plan_window_intent(message: str) -> dict[str, str] | None:
+    """Recognize narrow conversational requests to arrange an existing window."""
+    text = message.strip()
+    match = re.fullmatch(
+        r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?"
+        r"(?:switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore)\s+"
+        r"(?:the\s+)?(.+?)(?:\s+window)?[.!?]*",
+        text, re.IGNORECASE,
+    )
+    if not match:
+        return None
+    verb = re.match(r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?(switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore)\b", text, re.IGNORECASE)
+    if not verb:
+        return None
+    target = match.group(1).strip().strip('"')
+    if not target or len(target) > 100:
+        return None
+    action = "focus" if verb.group(1).casefold() in {"switch to", "focus on", "bring up"} else verb.group(1).casefold()
+    return {"target": target, "action": action}
