@@ -16,6 +16,7 @@ NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional 
 - The backend URL can be overridden with `NOVA_API_URL`.
 - Optional voice input runs Vosk in a worker thread and reads audio only after the user clicks Talk; optional speech output uses local Windows SAPI voices through pyttsx3.
 - Voice dependencies are isolated in the `voice` extra, and the Vosk model is downloaded separately and configured with `NOVA_VOSK_MODEL_PATH`.
+- The Computer controls dialog exposes a fixed allowlist of Windows applications and file operations limited to configured roots.
 
 ## AI provider layer
 
@@ -65,7 +66,7 @@ The SQLite memory service sits beside the provider adapter and is independent of
 3. Local model runtime integration.
 4. First desktop UI with threaded API requests.
 5. SQLite conversation history and local vector memory with approval, editing, and deletion controls.
-6. Permission manager, tool registry, and audit log.
+6. Permission manager, tool registry, and audit log (first implementation now available).
 7. Streaming text conversation.
 8. Voice pipeline foundation: local push-to-talk transcription and local speech output. Next: permission manager, tool registry, audit log, and small allowlisted Windows tools.
 
@@ -88,3 +89,18 @@ The SQLite memory service sits beside the provider adapter and is independent of
 The memory service is implemented in `src/nova/core/memory/store.py`. It uses the Python standard-library SQLite driver and stores conversations, messages, memory records, and normalized 256-dimensional feature-hash vectors. Retrieval ranks approved memories by cosine similarity locally. The deterministic encoder avoids a network dependency, external embedding service, model download, and GPU requirement; it is intentionally a lightweight first vector-retrieval implementation rather than a transformer embedding model.
 
 Memory capture uses a hybrid policy: explicit remember requests and recognized low-risk preferences/projects are stored automatically; selected high-impact statements are queued as pending; credentials, financial secrets, and government identifiers are rejected; detected sensitive personal facts are queued for user approval. The API exposes approval, edit, and delete operations. Memory is inserted as contextual data, never as executable instructions.
+
+
+## Computer control and permission model
+
+The initial computer-control registry lives in `src/nova/core/computer/registry.py`; its API is in `src/nova/api/computer.py`, and the desktop approval surface is `src/nova/desktop_computer.py`.
+
+- Applications are selected from a fixed allowlist (Notepad, Calculator, Paint, File Explorer); no user/model-supplied executable path is accepted.
+- File operations are disabled unless `NOVA_COMPUTER_ALLOWED_ROOTS` contains one or more existing folders separated by semicolons.
+- Directory listing, filename search, and text-file reading resolve paths and verify they remain under an approved root. Symlink escapes are rejected.
+- Text reads are limited to a small extension allowlist and 64 KB; filename search is capped at 200 results.
+- The desktop asks for confirmation for each action and defaults the dialog to No. The API rejects requests without an explicit approval flag.
+- Action metadata is stored in the existing local SQLite database in a `computer_audit` table. File contents are not logged.
+- The language model cannot call this API automatically. A future milestone may add intent planning, but it must preserve this approval boundary.
+
+This is a local-user permission boundary, not a hardened multi-user security boundary. Keep the API bound to loopback; do not expose it to a network without adding authentication and a stronger authorization design.
