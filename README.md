@@ -19,7 +19,8 @@ The project is in active early development. The current release includes a local
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
 - Permission-gated Windows integration that discovers installed applications and scans accessible local drives by default.
-- Local audit log for completed or blocked computer operations.\n- Read-only Windows session awareness: OS and resource overview, running-process inventory, visible-window inventory, and foreground-window detection.
+- Local audit log for completed or blocked computer operations.
+- Read-only Windows session awareness: OS and resource overview, running-process inventory, visible-window inventory, and foreground-window detection.
 
 ## Requirements
 
