@@ -254,11 +254,11 @@ def plan_multi_step_intent(message: str) -> list[dict[str, object]] | None:
     for part in parts:
         system = plan_system_intent(part)
         if system:
-            steps.append({"kind": "system", **system})
+            steps.append({**system, "action_kind": system["kind"], "kind": "system"})
             continue
         window = plan_window_intent(part)
         if window:
-            steps.append({"kind": "window", **window})
+            steps.append({**window, "kind": "window"})
             continue
         return None
     return steps if len(steps) == len(parts) else None
