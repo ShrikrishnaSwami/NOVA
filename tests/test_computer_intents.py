@@ -96,3 +96,13 @@ def test_window_planner_recognizes_conversational_window_actions() -> None:
     assert plan_window_intent("Please maximize Calculator") == {"target": "Calculator", "action": "maximize"}
     assert plan_window_intent("Restore Explorer") == {"target": "Explorer", "action": "restore"}
     assert plan_window_intent("Delete Chrome") is None
+
+
+def test_system_intent_planner_recognizes_bounded_controls() -> None:
+    from nova.core.computer.intents import plan_system_intent
+
+    assert plan_system_intent("Set volume to 35")["payload"]["percent"] == 35
+    assert plan_system_intent("change brightness to 70%")["endpoint"] == "/computer/system/brightness"
+    assert plan_system_intent("Search Windows for physics notes")["payload"]["query"] == "physics notes"
+    assert plan_system_intent("set volume to 150") is None
+    assert plan_system_intent("turn off my computer") is None
