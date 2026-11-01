@@ -9,4 +9,4 @@ def test_automation_capabilities_are_registered_and_bounded() -> None:
     payload = response.json()
     assert payload["max_steps"] == 5
     action_ids = {item["id"] for item in payload["actions"]}
-    assert {"system.volume", "system.brightness", "windows.search", "window.focus", "app.enter_text"} <= action_ids
+    assert {"system.volume", "system.brightness", "windows.search", "window.focus", "window.minimize"} <= action_ids
