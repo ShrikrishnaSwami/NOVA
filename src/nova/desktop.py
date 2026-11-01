@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 
-from nova.core.computer.shell_integration import ShellIntegrationError, set_startup_enabled, startup_enabled, show_windows_toast
+from nova.core.computer.shell_integration import ShellIntegrationError, notifications_enabled, set_notifications_enabled, set_startup_enabled, startup_enabled, show_windows_toast
 
 
 _SETTINGS = get_settings()
@@ -785,7 +785,7 @@ class NovaWindow(QMainWindow):
             self.streaming_body.setText(reply)
         self.history.append({"role": "assistant", "content": reply})
         self.last_response_text = reply
-        if self.isHidden():
+        if self.isHidden() and notifications_enabled():
             try:
                 show_windows_toast("NOVA has replied", reply[:350])
             except ShellIntegrationError:
@@ -972,6 +972,11 @@ class NovaWindow(QMainWindow):
         self.startup_action.setChecked(startup_enabled())
         self.startup_action.triggered.connect(self._toggle_startup)
         menu.addAction(self.startup_action)
+        self.notifications_action = QAction("Enable NOVA notifications", self)
+        self.notifications_action.setCheckable(True)
+        self.notifications_action.setChecked(notifications_enabled())
+        self.notifications_action.triggered.connect(self._toggle_notifications)
+        menu.addAction(self.notifications_action)
         notify_action = QAction("Send test notification", self)
         notify_action.triggered.connect(self._test_notification)
         menu.addAction(notify_action)
@@ -1024,6 +1029,18 @@ class NovaWindow(QMainWindow):
         except ShellIntegrationError as exc:
             self.startup_action.setChecked(startup_enabled())
             QMessageBox.warning(self, "Startup integration unavailable", str(exc))
+
+    def _toggle_notifications(self, checked: bool) -> None:
+        try:
+            enabled = set_notifications_enabled(checked)
+            self.notifications_action.setChecked(enabled)
+            self.tray.showMessage(
+                "NOVA notifications",
+                "NOVA reply notifications are enabled." if enabled else "NOVA reply notifications are disabled.",
+            )
+        except ShellIntegrationError as exc:
+            self.notifications_action.setChecked(notifications_enabled())
+            QMessageBox.warning(self, "Could not save notification preference", str(exc))
 
     def _test_notification(self) -> None:
         try:
