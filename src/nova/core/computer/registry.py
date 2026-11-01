@@ -11,13 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-_ALLOWED_APPS = {
-    "notepad": "notepad.exe",
-    "calculator": "calc.exe",
-    "paint": "mspaint.exe",
-    "file explorer": "explorer.exe",
-    "windows settings": "ms-settings:",
-}
+_WINDOWS_SETTINGS_ID = "windows-settings"
 _TEXT_SUFFIXES = {".txt", ".md", ".py", ".json", ".csv", ".log", ".yaml", ".yml", ".toml", ".ini"}
 _MAX_READ_BYTES = 64 * 1024
 _MAX_SEARCH_RESULTS = 200
