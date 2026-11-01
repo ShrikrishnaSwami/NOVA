@@ -110,3 +110,61 @@ def application_candidates(
             results.append(app)
             seen.add(app_id)
     return results
+
+
+def plan_computer_intent(message: str) -> dict[str, object] | None:
+    """Recognize narrow, read-only discovery requests and explicit local file actions.
+
+    This planner never executes anything. Its output is only a proposed typed action;
+    the desktop must obtain user approval before calling the computer API.
+    """
+    text = message.strip()
+    if not text:
+        return None
+
+    # Explicit content search: "search inside my files for ..." / "find text in files ..."
+    match = re.fullmatch(
+        r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?(?:search|find)\s+"
+        r"(?:inside|within)\s+(?:my\s+)?files\s+for\s+(.+?)[.!?]*",
+        text, re.IGNORECASE,
+    )
+    if match:
+        query = match.group(1).strip().strip('"')
+        if query:
+            return {"action": "search_file_contents", "parameters": {"query": query},
+                    "description": f"search accessible files for the text '{query}'"}
+
+    # Filename search: "find my resume", "look for physics assignment".
+    match = re.fullmatch(
+        r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?"
+        r"(?:find|locate|look\s+for|search\s+for)\s+"
+        r"(?:my\s+)?(.+?)[.!?]*",
+        text, re.IGNORECASE,
+    )
+    if match:
+        query = match.group(1).strip().strip('"')
+        query = re.sub(r"\s+(?:file|files|document|documents)$", "", query, flags=re.IGNORECASE).strip()
+        if query and len(query) <= 120:
+            return {"action": "search_files", "parameters": {"query": query},
+                    "description": f"search all accessible drives for files or folders matching '{query}'"}
+
+    # An explicit full path is required for opening or reading a specific item.
+    match = re.fullmatch(r"(?:please\s+)?(?:open|show)\s+([A-Za-z]:\\[^\r\n]+)", text, re.IGNORECASE)
+    if match:
+        path = match.group(1).strip().strip('"')
+        return {"action": "open_path", "parameters": {"path": path},
+                "description": f"open the local item {path}"}
+
+    match = re.fullmatch(r"(?:please\s+)?read\s+([A-Za-z]:\\[^\r\n]+)", text, re.IGNORECASE)
+    if match:
+        path = match.group(1).strip().strip('"')
+        return {"action": "read_text_file", "parameters": {"path": path},
+                "description": f"read the local document {path} and display it only inside NOVA"}
+
+    match = re.fullmatch(r"(?:please\s+)?(?:list|show)\s+(?:the\s+)?(?:files|contents)\s+in\s+([A-Za-z]:\\[^\r\n]+)", text, re.IGNORECASE)
+    if match:
+        path = match.group(1).strip().strip('"')
+        return {"action": "list_directory", "parameters": {"path": path},
+                "description": f"list the contents of {path}"}
+
+    return None
