@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
+
 import httpx
 from PySide6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QListWidget, QMessageBox, QPushButton,
     QVBoxLayout, QInputDialog,
 )
 
-from nova.desktop import API_ROOT, _HTTP_CLIENT
+API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
+_HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(20.0, connect=5.0))
 
 
 class ComputerControlsDialog(QDialog):
