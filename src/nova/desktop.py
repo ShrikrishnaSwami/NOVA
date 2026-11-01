@@ -1027,12 +1027,55 @@ class NovaWindow(QMainWindow):
         if reason:
             prompt += "\n\nReason: " + reason
         prompt += "\n\nThese actions will only run if you approve."
-        answer = QMessageBox.question(
-            self, "Approve NOVA tool actions", prompt,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        approval_dialog = QDialog(self)
+        approval_dialog.setWindowTitle("NOVA tool approval")
+        approval_dialog.setMinimumWidth(560)
+        approval_layout = QVBoxLayout(approval_dialog)
+
+        approval_heading = QLabel("NOVA wants to use these registered tools")
+        approval_heading.setObjectName("pageTitle")
+        approval_layout.addWidget(approval_heading)
+
+        approval_notice = QLabel(
+            "Review every action and its exact arguments. Nothing will run unless "
+            "you explicitly approve. Denying leaves your system unchanged."
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        approval_notice.setWordWrap(True)
+        approval_notice.setObjectName("muted")
+        approval_layout.addWidget(approval_notice)
+
+        if reason:
+            reason_label = QLabel("Reason: " + reason)
+            reason_label.setWordWrap(True)
+            approval_layout.addWidget(reason_label)
+
+        action_list = QListWidget()
+        action_list.setMinimumHeight(min(260, 76 * len(calls)))
+        for index, call in enumerate(calls, 1):
+            tool_name = str(call.get("name", "Unknown tool"))
+            arguments = json.dumps(call.get("arguments", {}), ensure_ascii=False, indent=2)
+            simulation_label = " [SIMULATION ONLY]" if tool_name.startswith("simulation.") else ""
+            item = QListWidgetItem(
+                f"{index}. {tool_name}{simulation_label}\\nArguments:\\n{arguments}"
+            )
+            action_list.addItem(item)
+        approval_layout.addWidget(action_list)
+
+        approval_buttons = QHBoxLayout()
+        approval_buttons.addStretch()
+        deny_button = QPushButton("Deny")
+        approve_button = QPushButton("Approve & execute")
+        approve_button.setObjectName("sendButton")
+        deny_button.clicked.connect(approval_dialog.reject)
+        approve_button.clicked.connect(approval_dialog.accept)
+        deny_button.setAutoDefault(False)
+        approve_button.setAutoDefault(False)
+        approval_buttons.addWidget(deny_button)
+        approval_buttons.addWidget(approve_button)
+        approval_layout.addLayout(approval_buttons)
+
+        approved = approval_dialog.exec() == QDialog.DialogCode.Accepted
+        if not approved:
             self._add_message("NOVA", "Understood. I haven't executed those actions.")
             self.history.append({"role": "assistant", "content": "Understood. I haven't executed those actions."})
             self.connection_label.setText("Tool actions declined.")
@@ -1048,9 +1091,16 @@ class NovaWindow(QMainWindow):
         self.tool_worker.start()
 
     def _tool_execute_failed(self, message: str) -> None:
-        self._request_failed(message)
-        self.send_button.setEnabled(True)
-        self.send_button.setText("Send  ↗")
+        # Keep the conversation moving: explain the execution failure through the
+        # configured model instead of leaving the user with a raw transport error.
+        self.connection_label.setText("Tool execution failed; asking NOVA to explain…")
+        self._start_chat_request(
+            "The user approved the proposed registered tools, but execution failed. "
+            "No successful tool results are available. The execution error was: "
+            + str(message)
+            + "\\nExplain clearly what failed and do not claim that any action completed.",
+            include_latest_user=True,
+        )
 
     def _tool_execute_completed(self, data: dict) -> None:
         results = data.get("results", [])
