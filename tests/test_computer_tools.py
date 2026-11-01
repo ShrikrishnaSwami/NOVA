@@ -1,3 +1,5 @@
+import pytest
+
 from fastapi.testclient import TestClient
 
 from nova.api import computer as computer_api
@@ -87,7 +89,7 @@ def test_computer_tools_reject_unlisted_applications(tmp_path, monkeypatch) -> N
         },
     )
     assert response.status_code == 422
-    assert "allowlist" in response.json()["detail"].lower()
+    assert "catalogue" in response.json()["detail"].lower()
 
 
 def test_windows_settings_launch_uses_fixed_uri_without_shell(tmp_path, monkeypatch) -> None:
@@ -99,9 +101,52 @@ def test_windows_settings_launch_uses_fixed_uri_without_shell(tmp_path, monkeypa
         lambda args, **kwargs: calls.append((args, kwargs)),
     )
     registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
-    result = registry.execute("open_application", {"app": "windows settings"})
+    monkeypatch.setattr(
+        registry,
+        "discover_applications",
+        lambda: [{"name": "Windows Settings", "app_id": "windows-settings"}],
+    )
+    result = registry.execute("open_application", {"app_id": "windows-settings"})
 
-    assert result["message"] == "Opened windows settings."
+    assert result["message"] == "Opened Windows Settings."
     assert calls == [
         (["explorer.exe", "ms-settings:"], {"shell": False, "close_fds": True})
     ]
+
+
+def test_discover_apps_from_start_menu_shortcuts(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    root = tmp_path / "Programs"
+    nested = root / "Productivity"
+    nested.mkdir(parents=True)
+    shortcut = nested / "Example Editor.lnk"
+    shortcut.write_bytes(b"fake shortcut for catalogue test")
+    monkeypatch.setattr(computer_registry, "_start_menu_roots", lambda: [root])
+
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    apps = registry.discover_applications()
+
+    assert {"name": "Example Editor", "app_id": str(shortcut.resolve())} in apps
+    assert {"name": "Windows Settings", "app_id": "windows-settings"} in apps
+
+
+def test_launch_only_accepts_currently_discovered_shortcuts(tmp_path, monkeypatch) -> None:
+    from nova.core.computer import registry as computer_registry
+    from nova.core.computer.registry import ComputerToolRegistry
+
+    root = tmp_path / "Programs"
+    root.mkdir()
+    shortcut = root / "Trusted App.lnk"
+    shortcut.write_bytes(b"fake shortcut")
+    launches = []
+    monkeypatch.setattr(computer_registry, "_start_menu_roots", lambda: [root])
+    monkeypatch.setattr(computer_registry, "_start_shortcut", lambda path: launches.append(path))
+
+    registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
+    registry.execute("open_application", {"app_id": str(shortcut.resolve())})
+    assert launches == [str(shortcut.resolve())]
+
+    with pytest.raises(computer_registry.ComputerToolError):
+        registry.execute("open_application", {"app_id": str(root / "not-discovered.exe")})
