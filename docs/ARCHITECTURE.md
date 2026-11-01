@@ -145,3 +145,8 @@ Computer Controls provides opt-in battery and power-state monitoring. It polls p
 A bounded multi-step planner accepts up to five `then`-chained system/window actions. The entire chain is validated before execution, then each step requires its own confirmation. A cancelled, failed, or unresolved step halts the chain. Unsupported steps invalidate the plan; model-generated text is never executed as code.
 
 UI Automation supports exact-name activation of a small set of visible controls and, separately, text entry into one uniquely named visible enabled non-password Edit control. Text entry is limited to 2,000 characters, requires explicit approval, and the text itself is omitted from audit parameters. Password fields and arbitrary keyboard injection are excluded.
+
+
+## Desktop-managed backend lifecycle
+
+When the desktop starts, it probes the configured local API health endpoint. If no healthy API is present and NOVA_API_URL matches the configured loopback host/port, the desktop starts `python -m uvicorn nova.main:app` as a child process with no console window. It never auto-starts a backend on a non-loopback bind address or silently redirects a custom NOVA_API_URL. On explicit Quit, it terminates only the child process it owns; it does not stop a backend that was already running. The API remains a separate local process boundary, preserving the existing FastAPI architecture.
