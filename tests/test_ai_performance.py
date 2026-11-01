@@ -76,7 +76,13 @@ def test_chat_context_uses_only_configured_recent_history(monkeypatch) -> None:
 
     messages = chat_api._messages(request)
 
-    assert [message.content for message in messages] == [
+    # System instructions are deliberately retained, but do not count toward
+    # the configured conversational-history window.
+    assert any(message.role == "system" for message in messages)
+    conversation_messages = [
+        message for message in messages if message.role != "system"
+    ]
+    assert [message.content for message in conversation_messages] == [
         "Recent question",
         "Recent answer",
         "Current question",
