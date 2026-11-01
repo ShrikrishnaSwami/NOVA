@@ -245,7 +245,7 @@ class ComputerToolRegistry:
         for root in _start_menu_roots():
             for current, directories, files in os.walk(root, followlinks=False):
                 current_path = Path(current)
-                directories[:] = [name for name in directories if not (current_path / name).is_symlink()]
+                directories[:] = [name for name in directories if not _is_link_or_junction(current_path / name)]
                 for filename in files:
                     shortcut = current_path / filename
                     if shortcut.suffix.lower() != ".lnk" or shortcut.is_symlink():
@@ -340,7 +340,7 @@ class ComputerToolRegistry:
                 entries = []
                 for child in sorted(folder.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))[:100]:
                     try:
-                        if child.is_symlink():
+                        if _is_link_or_junction(child):
                             continue
                         entries.append({"name": child.name, "type": "folder" if child.is_dir() else "file"})
                     except OSError:
@@ -385,7 +385,7 @@ class ComputerToolRegistry:
                         directories[:] = [name for name in directories if not _is_link_or_junction(current_path / name)]
                         for name in files:
                             candidate = current_path / name
-                            if candidate.suffix.lower() not in _TEXT_SUFFIXES or candidate.is_symlink():
+                            if candidate.suffix.lower() not in _TEXT_SUFFIXES or _is_link_or_junction(candidate):
                                 continue
                             try:
                                 if candidate.stat().st_size > _MAX_READ_BYTES:
