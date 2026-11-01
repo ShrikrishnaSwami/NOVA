@@ -513,6 +513,17 @@ class NovaWindow(QMainWindow):
             self.connection_label.setText(reply)
 
         kind = intent["kind"]
+        navigation = {
+            "open_computer": (self._open_computer_controls, "Opened Computer Controls."),
+            "open_memory": (self._open_memory_manager, "Opened the memory manager."),
+            "open_history": (self._open_history_manager, "Opened conversation history."),
+        }
+        if kind in navigation:
+            callback, message_text = navigation[kind]
+            callback()
+            respond(message_text)
+            return True
+
         if kind == "open":
             respond("Opening your scheduled tasks.")
             self._open_task_manager()
