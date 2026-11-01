@@ -73,3 +73,29 @@ def test_memories_can_be_edited_and_deleted(tmp_path) -> None:
     assert store.list_memories()[0]["content"] == "I like building local-first desktop software."
     assert store.delete_memory(memory["id"])
     assert store.list_memories() == []
+
+
+def test_editing_memory_to_sensitive_content_requires_approval(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    memory = store.capture_from_text("I like building desktop software.")
+
+    assert memory is not None
+    assert store.update_memory(memory["id"], "My phone number is 555-0100.")
+    edited = store.list_memories()[0]
+    assert edited["status"] == "pending"
+    assert edited["category"] == "sensitive"
+    assert store.retrieve("phone number") == []
+
+
+def test_editing_memory_to_credentials_is_rejected(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    memory = store.capture_from_text("I like building desktop software.")
+
+    assert memory is not None
+    try:
+        store.update_memory(memory["id"], "My password is hunter2 and this is secret.")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Credential-like memory edits must be rejected.")
+    assert store.list_memories()[0]["content"] == memory["content"]
