@@ -41,6 +41,14 @@ class ComputerControlsDialog(QDialog):
             ("Search contents", self.search_contents),
             ("Open path", self.open_path),
             ("Read text file", self.read_file),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            actions.addWidget(button)
+        layout.addLayout(actions)
+
+        os_actions = QHBoxLayout()
+        for label, callback in (
             ("System overview", self.show_system),
             ("Running processes", self.show_processes),
             ("Open windows", self.show_windows),
@@ -48,8 +56,8 @@ class ComputerControlsDialog(QDialog):
         ):
             button = QPushButton(label)
             button.clicked.connect(callback)
-            actions.addWidget(button)
-        layout.addLayout(actions)
+            os_actions.addWidget(button)
+        layout.addLayout(os_actions)
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
         layout.addWidget(close)
