@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from nova.config import Settings, environment_file, user_memory_path
@@ -22,5 +23,10 @@ def test_environment_file_falls_back_to_project_env(tmp_path: Path, monkeypatch)
 
 
 def test_memory_path_is_outside_project_directory(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
-    assert user_memory_path() == str(tmp_path / ".nova" / "nova_memory.sqlite3")
+    if os.name == "nt":
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        expected = tmp_path / "NOVA" / "nova_memory.sqlite3"
+    else:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        expected = tmp_path / ".nova" / "nova_memory.sqlite3"
+    assert user_memory_path() == str(expected)
