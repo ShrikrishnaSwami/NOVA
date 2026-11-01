@@ -1,0 +1,27 @@
+$ErrorActionPreference = "Stop"
+Set-Location (Join-Path $PSScriptRoot "..")
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[desktop,voice,windows,documents,build]"
+
+$args = @(
+  "--noconfirm", "--clean", "--onedir", "--windowed",
+  "--name", "NOVA", "--paths", "src",
+  "--collect-all", "PySide6",
+  "--collect-all", "pywinauto",
+  "--collect-all", "pycaw",
+  "--collect-all", "winotify",
+  "--hidden-import", "nova.main",
+  "--hidden-import", "nova.service",
+  "--hidden-import", "uvicorn.logging",
+  "--hidden-import", "uvicorn.loops.auto",
+  "--hidden-import", "uvicorn.protocols.http.auto",
+  "--hidden-import", "uvicorn.lifespan.on",
+  "scripts/nova_entry.py"
+)
+python -m PyInstaller @args
+
+if (-not (Test-Path "dist/NOVA/NOVA.exe")) {
+  throw "PyInstaller did not produce dist/NOVA/NOVA.exe"
+}
+Write-Host "NOVA packaged successfully at dist/NOVA"
