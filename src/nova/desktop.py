@@ -945,7 +945,7 @@ class NovaWindow(QMainWindow):
 
     def _tool_plan_failed(self, message: str) -> None:
         self.connection_label.setText("Tool planning unavailable; continuing with ordinary chat.")
-        self._start_chat_request(self._pending_tool_message)
+        self._start_chat_request(self._pending_tool_message, include_latest_user=False)
 
     def _tool_plan_finished(self) -> None:
         self.send_button.setEnabled(True)
@@ -1002,7 +1002,7 @@ class NovaWindow(QMainWindow):
         self.streaming_body = self._add_message("NOVA", "")
         self.worker = ApiWorker(
             "/chat/stream",
-            {"message": message, "history": self.history[-20:], "conversation_id": self.conversation_id},
+            {"message": message, "history": (self.history if include_latest_user else self.history[:-1])[-20:], "conversation_id": self.conversation_id},
             streaming=True,
         )
         self.worker.token.connect(self._append_stream_token)
