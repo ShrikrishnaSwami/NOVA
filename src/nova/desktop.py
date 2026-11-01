@@ -1237,6 +1237,9 @@ class NovaWindow(QMainWindow):
             self.speech_worker.stop()
 
     def _speak_text(self, text: str, *, resume_wake: bool = False) -> None:
+        if self.speech_worker and self.speech_worker.isRunning():
+            self.speech_worker.stop()
+            self.speech_worker.wait(1000)
         self.speech_worker = SpeechOutputWorker(text)
         self.speech_worker.failed.connect(self.connection_label.setText)
         self.speech_worker.finished_speaking.connect(
