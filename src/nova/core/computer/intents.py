@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-_OPEN_PREFIX = re.compile(r"^(?:please\\s+)?(?:open|launch|start)\\s+(?:the\\s+)?(.+?)(?:\\s+please)?[.!?]*$", re.IGNORECASE)
+_OPEN_PREFIX = re.compile(r"^(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?(.+?)(?:\s+please)?[.!?]*$", re.IGNORECASE)
 
 
 def _normalize(value: str) -> str:
