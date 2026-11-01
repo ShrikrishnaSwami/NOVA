@@ -16,7 +16,7 @@ NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional 
 - The backend URL can be overridden with `NOVA_API_URL`.
 - Optional voice input runs Vosk in a worker thread and reads audio only after the user clicks Talk; optional speech output uses local Windows SAPI voices through pyttsx3.
 - Voice dependencies are isolated in the `voice` extra, and the Vosk model is downloaded separately and configured with `NOVA_VOSK_MODEL_PATH`.
-- The Computer controls dialog exposes a fixed allowlist of Windows applications and file operations limited to configured roots.
+- Computer controls discover `.lnk` application shortcuts in the current-user and all-users Windows Start Menus. Exact app-name requests are matched against that live catalogue and require per-launch confirmation; file operations remain limited to configured roots.
 
 ## AI provider layer
 
