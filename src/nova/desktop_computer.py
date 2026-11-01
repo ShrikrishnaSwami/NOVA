@@ -135,7 +135,7 @@ class ComputerControlsDialog(QDialog):
         if not roots:
             QMessageBox.information(self, "No approved folders", "No accessible drives or folders were discovered.")
             return
-        path, accepted = QInputDialog.getItem(self, "List folder", "Choose an approved folder:", roots, 0, False)
+        path, accepted = QInputDialog.getItem(self, "List folder", "Choose an accessible drive or configured folder:", roots, 0, False)
         if accepted:
             self.execute("list_directory", {"path": path}, f"list the contents of {path}")
 
@@ -166,12 +166,12 @@ class ComputerControlsDialog(QDialog):
         capabilities = self.refresh_capabilities()
         roots = capabilities.get("file_roots", [])
         if not roots:
-            QMessageBox.information(self, "No approved folders", "Add folders to NOVA_COMPUTER_ALLOWED_ROOTS in your private .env file, then restart the backend.")
+            QMessageBox.information(self, "No approved folders", "No accessible drives or folders were discovered.")
             return
         root, accepted = QInputDialog.getItem(self, "Read text file", "Choose an approved folder:", roots, 0, False)
         if not accepted:
             return
-        path, accepted = QInputDialog.getText(self, "Read text file", "Enter the full path to a text file inside that folder:")
+        path, accepted = QInputDialog.getText(self, "Read text file", "Enter the full path to a supported text, PDF, Word, or Excel file:")
         if accepted and path.strip():
             try:
                 import os
