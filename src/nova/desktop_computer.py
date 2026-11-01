@@ -58,6 +58,13 @@ class ComputerControlsDialog(QDialog):
             button.clicked.connect(callback)
             os_actions.addWidget(button)
         layout.addLayout(os_actions)
+
+        window_actions = QHBoxLayout()
+        control_windows = QPushButton("Control a window")
+        control_windows.clicked.connect(self.control_window)
+        window_actions.addWidget(control_windows)
+        layout.addLayout(window_actions)
+
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
         layout.addWidget(close)
@@ -241,3 +248,48 @@ class ComputerControlsDialog(QDialog):
             self.status.setText("Recent computer actions. File contents are never stored in this log.")
         except Exception as exc:
             QMessageBox.warning(self, "Audit log unavailable", str(exc))
+
+
+    def control_window(self) -> None:
+        try:
+            windows = self.request("GET", "/computer/windows?limit=200").get("windows", [])
+            if not windows:
+                QMessageBox.information(self, "No open windows", "NOVA could not find any visible titled windows.")
+                return
+            labels = [f"{item.get('title', 'Untitled')}  ·  PID {item.get('pid')}  ·  {item.get('handle')}" for item in windows]
+            selected, accepted = QInputDialog.getItem(self, "Choose a window", "Select a visible window:", labels, 0, False)
+            if not accepted:
+                return
+            target = windows[labels.index(selected)]
+            action, accepted = QInputDialog.getItem(
+                self, "Window action", "Choose what NOVA should do:",
+                ["Focus / switch to", "Minimize", "Restore", "Maximize"], 0, False,
+            )
+            if not accepted:
+                return
+            action_id = {
+                "Focus / switch to": "focus", "Minimize": "minimize",
+                "Restore": "restore", "Maximize": "maximize",
+            }[action]
+            answer = QMessageBox.question(
+                self, "Approve window control?",
+                f"NOVA will {action.lower()} this window:\n\n{target.get('title')}\n\nAllow this one action?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.status.setText("Window action cancelled.")
+                return
+            result = self.request(
+                "POST", "/computer/windows/actions",
+                json={"handle": target["handle"], "action": action_id, "approved": True},
+            )
+            self.status.setText(result.get("message", "Window action requested."))
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = exc.response.json().get("detail", str(exc))
+            except ValueError:
+                detail = str(exc)
+            QMessageBox.warning(self, "Window control blocked", str(detail))
+        except Exception as exc:
+            QMessageBox.warning(self, "Window control unavailable", str(exc))
