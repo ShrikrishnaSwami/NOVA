@@ -24,9 +24,11 @@ The simulations do not control physical hardware. The current model registry
 does not yet expose mutating Windows actions; those remain on the existing
 permission-scoped Computer Controls path.
 
-The planning endpoint is an API foundation. The desktop chat interface does not
-yet automatically present the proposal/approval flow, and model-generated plans
-should be treated as untrusted until reviewed by the user. Qwen3 models served
+The desktop chat now requests a model plan before ordinary chat, displays a
+confirmation dialog when tools are proposed, executes only after approval, and
+sends the actual tool results back to the model for a final response. If planning
+fails or the model returns no tools, NOVA falls back to ordinary chat. Model-
+generated plans remain untrusted until reviewed by the user. Qwen3 models served
 through Bionic may vary in JSON reliability; invalid output fails closed.
 
 ## Local wake-word session
