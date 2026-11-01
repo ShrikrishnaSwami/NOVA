@@ -46,12 +46,22 @@ def test_high_impact_memory_waits_for_approval(tmp_path) -> None:
     assert store.retrieve("launch NOVA")
 
 
-def test_sensitive_credentials_are_not_saved(tmp_path) -> None:
+def test_sensitive_credentials_are_never_saved(tmp_path) -> None:
     store = MemoryStore(tmp_path / "nova.sqlite3")
     memory = store.capture_from_text("Please remember that my password is hunter2.")
 
     assert memory is None
     assert store.list_memories() == []
+
+
+def test_sensitive_personal_facts_wait_for_approval(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "nova.sqlite3")
+    memory = store.capture_from_text("My phone number is 555-0100.")
+
+    assert memory is not None
+    assert memory["status"] == "pending"
+    assert memory["category"] == "sensitive"
+    assert store.retrieve("phone number") == []
 
 
 def test_memories_can_be_edited_and_deleted(tmp_path) -> None:
