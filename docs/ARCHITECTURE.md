@@ -129,3 +129,8 @@ src/nova/core/computer/system_controls.py contains fixed, typed Windows operatio
 A deterministic planner recognizes numeric volume/brightness requests and bounded Windows Search phrases. The desktop displays a confirmation before invoking the typed endpoint. The optional active-app watcher is user-started, polls only the foreground window title every two seconds while the Computer Controls dialog is open, and stops when the dialog closes. It does not persist titles, capture screen contents, or add window context to AI prompts. It is intentionally off by default.
 
 The optional windows dependency group installs pycaw for master audio control. Core APIs remain importable without that optional package; attempting audio adjustment without it returns an actionable setup error.
+
+
+## Application UI Automation boundary
+
+The optional pywinauto adapter in src/nova/core/computer/ui_automation.py attaches to an existing visible top-level window by its enumerated HWND. It exposes only enabled, visible Button, TabItem, MenuItem, Hyperlink, CheckBox, and RadioButton controls with accessible names. Activation requires an exact name and control type that resolve to exactly one current control, plus explicit desktop/API approval. It does not send arbitrary text, read edit controls, execute scripts, or operate on unlisted windows. UI Automation availability depends on the target application's accessibility tree; some apps expose incomplete controls.
