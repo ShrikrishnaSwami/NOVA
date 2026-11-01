@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
+from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
@@ -283,6 +284,11 @@ class NovaWindow(QMainWindow):
         history_button.setObjectName("newChat")
         history_button.clicked.connect(self._open_history_manager)
         side.addWidget(history_button)
+
+        computer_button = QPushButton("⌘   Computer controls")
+        computer_button.setObjectName("newChat")
+        computer_button.clicked.connect(self._open_computer_controls)
+        side.addWidget(computer_button)
 
         nav_label = QLabel("WORKSPACE")
         nav_label.setObjectName("eyebrow")
@@ -590,6 +596,10 @@ class NovaWindow(QMainWindow):
         self.connection_label.setText(message)
 
 
+
+    def _open_computer_controls(self) -> None:
+        dialog = ComputerControlsDialog(self)
+        dialog.exec()
 
     def _open_history_manager(self) -> None:
         dialog = QDialog(self)
