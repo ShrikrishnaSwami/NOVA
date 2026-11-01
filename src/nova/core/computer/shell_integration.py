@@ -92,3 +92,34 @@ def set_notifications_enabled(enabled: bool) -> bool:
     except OSError as exc:
         raise ShellIntegrationError(f"Could not save NOVA notification preferences: {exc}") from exc
     return notifications_enabled()
+
+
+
+def wake_word_enabled() -> bool:
+    """Return the user's explicit local wake-word microphone preference."""
+    path = user_data_dir() / "preferences.json"
+    try:
+        preferences = json.loads(path.read_text(encoding="utf-8"))
+        return preferences.get("wake_word_enabled") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def set_wake_word_enabled(enabled: bool) -> bool:
+    """Persist wake-word opt-in locally; disabled by default."""
+    directory = user_data_dir()
+    path = directory / "preferences.json"
+    temporary = directory / "preferences.json.tmp"
+    try:
+        try:
+            preferences = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(preferences, dict):
+                preferences = {}
+        except (OSError, ValueError):
+            preferences = {}
+        preferences["wake_word_enabled"] = bool(enabled)
+        temporary.write_text(json.dumps(preferences, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    except OSError as exc:
+        raise ShellIntegrationError(f"Could not save NOVA wake-word preference: {exc}") from exc
+    return wake_word_enabled()
