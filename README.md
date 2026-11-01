@@ -198,7 +198,13 @@ NOVA exposes read-only information about the current Windows session:
 - `GET /computer/system` — OS, hardware/runtime details, resource metrics via the core psutil dependency, and the foreground window.
 - `GET /computer/processes` — bounded process inventory (PID, process name, status, resident memory); it deliberately omits command lines and environment variables.
 - `GET /computer/windows` — visible top-level window titles and owning process IDs.\n- `POST /computer/windows/actions` — focus, minimize, restore, or maximize a selected visible window after explicit approval.
+- `POST /computer/system/volume` and `/computer/system/brightness` — adjust supported Windows audio/display hardware after confirmation.
+- `POST /computer/windows/search` — open native Windows Search for a query after confirmation.
 
 Process and resource metrics use the core psutil dependency. Window enumeration uses the Windows API directly. These endpoints do not terminate processes, inject input, capture screenshots, or bypass Windows permissions. The desktop also exposes a confirmed **Control a window** action: choose a visible window, then explicitly approve focusing/switching to it, minimizing, restoring, or maximizing it. The API supports only those four operations; it does not close apps or inject keyboard/mouse input. Window controls are Windows-only and require the target to remain a visible top-level window.
+NOVA can also handle `set volume to 35`, `change brightness to 70%`, and `search Windows for physics notes`. Each is parsed into a fixed typed operation and confirmed before execution. Volume adjustment uses the optional `pycaw` Windows audio extra; install it with `pip install -e ".[windows]"`. Brightness control uses the Windows WMI interface and may not work with external monitors or every laptop panel. Windows Search opens the native indexed-search experience in Explorer; NOVA does not scrape or bypass its index.
+
+The Computer Controls panel also offers temporary active-app awareness. It is off by default, polls the foreground window title only after you opt in, stops when the panel closes, and does not save titles or send them to the AI.
+
 You can also use short natural-language window commands in chat, such as "Switch to Chrome", "Minimize Notepad", "Restore Explorer", or "Maximize Calculator". NOVA matches the request against currently visible window titles, asks you to choose if multiple windows match, and always asks for confirmation before changing a window.
 
