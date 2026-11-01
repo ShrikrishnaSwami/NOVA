@@ -11,7 +11,9 @@ class ShellIntegrationError(RuntimeError):
 
 
 def _startup_command() -> str:
-    return f'"{sys.executable}" -m nova.desktop'
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}" --background'
+    return f'"{sys.executable}" -m nova.desktop --background'
 
 
 def startup_enabled() -> bool:
@@ -22,7 +24,7 @@ def startup_enabled() -> bool:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
             value, _ = winreg.QueryValueEx(key, "NOVA")
             return bool(value)
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return False
 
 
