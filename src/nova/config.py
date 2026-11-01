@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # SQLite database; the path is expanded and created automatically.
     memory_db_path: str = "~/.nova/nova_memory.sqlite3"
 
+    # Optional local Vosk model directory for desktop push-to-talk input.
+    vosk_model_path: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="NOVA_",
