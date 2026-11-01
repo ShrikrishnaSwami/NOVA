@@ -197,7 +197,8 @@ NOVA exposes read-only information about the current Windows session:
 
 - `GET /computer/system` — OS, hardware/runtime details, resource metrics via the core psutil dependency, and the foreground window.
 - `GET /computer/processes` — bounded process inventory (PID, process name, status, resident memory); it deliberately omits command lines and environment variables.
-- `GET /computer/windows` — visible top-level window titles and owning process IDs.\n- `POST /computer/windows/actions` — focus, minimize, restore, or maximize a selected visible window after explicit approval.
+- `GET /computer/windows` — visible top-level window titles and owning process IDs.
+- `POST /computer/windows/actions` — focus, minimize, restore, or maximize a selected visible window after explicit approval.
 - `POST /computer/system/volume` and `/computer/system/brightness` — adjust supported Windows audio/display hardware after confirmation.
 - `POST /computer/windows/search` — open native Windows Search for a query after confirmation.
 
