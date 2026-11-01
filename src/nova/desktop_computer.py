@@ -82,6 +82,9 @@ class ComputerControlsDialog(QDialog):
         interact_button = QPushButton("Interact with an app")
         interact_button.clicked.connect(self.interact_with_app)
         automation_row.addWidget(interact_button)
+        text_button = QPushButton("Enter text into an app")
+        text_button.clicked.connect(self.enter_text_into_app)
+        automation_row.addWidget(text_button)
         layout.addLayout(automation_row)
 
         self.foreground_timer = QTimer(self)
@@ -519,3 +522,48 @@ class ComputerControlsDialog(QDialog):
             QMessageBox.warning(self, "App interaction blocked", str(detail))
         except Exception as exc:
             QMessageBox.warning(self, "App interaction unavailable", str(exc))
+
+
+    def enter_text_into_app(self) -> None:
+        try:
+            windows = self.request("GET", "/computer/windows?limit=200").get("windows", [])
+            if not windows:
+                QMessageBox.information(self, "No open apps", "NOVA could not find visible titled application windows.")
+                return
+            labels = [f"{item.get('title')} · PID {item.get('pid')}" for item in windows]
+            selected, accepted = QInputDialog.getItem(self, "Choose application", "Enter text into:", labels, 0, False)
+            if not accepted:
+                return
+            target = windows[labels.index(selected)]
+            fields = self.request("GET", f"/computer/windows/{target['handle']}/editable-fields?limit=100").get("fields", [])
+            if not fields:
+                QMessageBox.information(self, "No safe text fields", "NOVA found no enabled visible non-password text fields in this application.")
+                return
+            field_labels = [item["name"] for item in fields]
+            field_name, accepted = QInputDialog.getItem(self, "Choose text field", "Select the exact accessible field:", field_labels, 0, False)
+            if not accepted:
+                return
+            text, accepted = QInputDialog.getMultiLineText(self, "Text to enter", f"Enter text for {field_name} in {target.get('title')}:")
+            if not accepted or not text:
+                return
+            answer = QMessageBox.question(
+                self, "Approve application text entry?",
+                f"NOVA will enter the following text into {target.get('title')} → {field_name}:\n\n{text[:500]}\n\nAllow this one text-entry action?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            result = self.request(
+                "POST", "/computer/windows/controls/text",
+                json={"handle": target["handle"], "name": field_name, "text": text, "approved": True},
+            )
+            self.status.setText(result.get("message", "Text entered."))
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = exc.response.json().get("detail", str(exc))
+            except ValueError:
+                detail = str(exc)
+            QMessageBox.warning(self, "Text entry blocked", str(detail))
+        except Exception as exc:
+            QMessageBox.warning(self, "Text entry unavailable", str(exc))
