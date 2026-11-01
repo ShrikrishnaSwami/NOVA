@@ -19,7 +19,7 @@ The project is in active early development. The current release includes a local
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
 - Permission-gated Windows integration that discovers installed applications and scans accessible local drives by default.
-- Local audit log for completed or blocked computer operations.
+- Local audit log for completed or blocked computer operations.\n- Read-only Windows session awareness: OS and resource overview, running-process inventory, visible-window inventory, and foreground-window detection.
 
 ## Requirements
 
@@ -189,3 +189,14 @@ NOVA's first deterministic computer planner can route requests such as:
 - "List files in C:\\Users\\you\\Documents" — ask before listing a folder.
 
 Every planned action is reviewed through a one-action confirmation dialog. The planner is intentionally deterministic at this stage: it does not execute model-generated commands, and it does not yet perform multi-step autonomous workflows.
+
+
+## Windows OS awareness (first integration layer)
+
+NOVA exposes read-only information about the current Windows session:
+
+- `GET /computer/system` — OS, hardware/runtime details, resource metrics when the optional dependency is installed, and the foreground window.
+- `GET /computer/processes` — bounded process inventory (PID, process name, status, resident memory); it deliberately omits command lines and environment variables.
+- `GET /computer/windows` — visible top-level window titles and owning process IDs.
+
+Install process/resource metrics with `pip install -e ".[windows]"`. Window enumeration uses the Windows API directly. These endpoints do not terminate processes, inject input, capture screenshots, or bypass Windows permissions. This is the first OS-awareness layer; controlled window interaction, notifications, system settings, and event-driven context are separate follow-on capabilities.
