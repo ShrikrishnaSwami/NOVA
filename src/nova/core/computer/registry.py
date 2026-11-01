@@ -275,7 +275,7 @@ class ComputerToolRegistry:
                     None,
                 )
                 if selected is None:
-                    raise ComputerToolError("That application is not in the current Windows Start Menu catalogue. Refresh the app list and try again.")
+                    raise ComputerToolError("That application is no longer in the current installed-app catalogue. Refresh the app list and try again.")
                 app = selected["name"]
                 if app_id == _WINDOWS_SETTINGS_ID:
                     subprocess.Popen(["explorer.exe", "ms-settings:"], shell=False, close_fds=True)
