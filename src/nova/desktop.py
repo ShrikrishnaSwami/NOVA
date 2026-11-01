@@ -1018,15 +1018,7 @@ class NovaWindow(QMainWindow):
             self._start_chat_request(self._pending_tool_message)
             return
         self._pending_tool_calls = calls
-        descriptions = "\n".join(
-            f"{index}. {call.get('name')} — {json.dumps(call.get('arguments', {}), ensure_ascii=False)}"
-            for index, call in enumerate(calls, 1)
-        )
         reason = str(proposal.get("reason", "")).strip()
-        prompt = "NOVA proposes the following registered tool actions:\n\n" + descriptions
-        if reason:
-            prompt += "\n\nReason: " + reason
-        prompt += "\n\nThese actions will only run if you approve."
         approval_dialog = QDialog(self)
         approval_dialog.setWindowTitle("NOVA tool approval")
         approval_dialog.setMinimumWidth(560)
