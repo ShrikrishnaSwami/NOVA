@@ -18,7 +18,7 @@ The project is in active early development. The current release includes a local
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
-- Permission-gated computer tools that discover Windows Start Menu app shortcuts and explicitly approved folders.
+- Permission-gated Windows integration that discovers installed applications and scans accessible local drives by default.
 - Local audit log for completed or blocked computer operations.
 
 ## Requirements
@@ -118,22 +118,23 @@ Useful endpoints:
 
 ## Computer controls (Stage 4)
 
-Open **Computer controls** in the desktop sidebar. NOVA currently supports:
+Open **Computer controls** in the desktop sidebar. The current OS-discovery foundation supports:
 
-- Discover launchable `.lnk` applications from both the current-user and all-users Windows Start Menus, plus Windows Settings.
-- List folders, search file/folder names, and read selected text files inside explicitly approved roots.
-- Ask for a separate confirmation before every operation.
-- Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
-
-File access is disabled by default. Add only folders you want NOVA to access to your private `.env` file. Separate multiple paths with semicolons:
+- Discover Windows Start Menu shortcuts, registered packaged apps, and classic installed desktop apps.
+- Discover ready local drive roots automatically when `NOVA_COMPUTER_ALLOWED_ROOTS` is empty. This is the full-accessible-drive mode selected for NOVA; Windows still enforces the permissions of the signed-in account.
+- Override automatic discovery with specific folders in the private `.env` file if you later want a narrower scope. Separate multiple paths with semicolons:
 
 ```dotenv
 NOVA_COMPUTER_ALLOWED_ROOTS=C:\\Users\\YourName\\Documents;C:\\Users\\YourName\\Desktop
 ```
 
-Replace the example paths with real folders on your computer, then restart the backend. The desktop dialog shows the active approved roots. NOVA can read only TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, and INI files up to 64 KB. Search results are capped at 200. Paths are resolved and checked against approved roots to prevent traversal and symlink escapes.
+- Search file and folder names, search inside supported local text files, list folders, read supported text files up to 2 MB, and request Windows to open a discovered path.
+- Require a separate confirmation before opening or reading items. Search is read-only; inaccessible or protected locations are skipped by Windows permissions.
+- Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
 
-The API rejects operations unless the desktop sends an explicit approval flag. NOVA matches exact app names against its live Start Menu catalogue, so phrases such as “open Spotify” or “launch Google Chrome” use the same confirmation prompt. Launching uses the discovered `.lnk` shortcut through the Windows Shell; arbitrary shell commands, PowerShell, and model-selected executable paths are not exposed. Apps without a Windows Start Menu shortcut are not currently included.
+The current content-search formats include TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, INI, HTML, XML, SQL, JavaScript, TypeScript, CSS, Java, C/C++, PowerShell, batch, shell, and RTF. Results are capped at 500. This is the first OS-wide discovery layer, not yet a full Windows Search index or universal document parser; PDF and Office document content indexing and richer semantic retrieval are planned next.
+
+The API rejects actions unless the desktop sends an explicit approval flag. App launch requests resolve against the live Windows application catalogue. NOVA does not expose arbitrary shell commands or let the model execute arbitrary executable paths.
 
 Useful endpoints:
 - `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
