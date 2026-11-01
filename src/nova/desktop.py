@@ -457,10 +457,17 @@ class NovaWindow(QMainWindow):
         if not message or (self.worker and self.worker.isRunning()):
             return
 
-        # Handle only exact, deterministic allowlisted app-launch commands locally.
-        # All other messages continue through the normal AI chat pipeline.
-        requested_app = match_open_application_command(message)
+        # Match launch requests against the live Windows Start Menu catalogue.
+        try:
+            capabilities_response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/capabilities")
+            capabilities_response.raise_for_status()
+            discovered_apps = capabilities_response.json().get("applications", [])
+            requested_app = match_open_application_command(message, discovered_apps)
+        except Exception:
+            requested_app = None
+
         if requested_app:
+            app_name = requested_app["name"]
             self.input.clear()
             self._add_message("YOU", message)
             self.history.append({"role": "user", "content": message})
@@ -470,13 +477,13 @@ class NovaWindow(QMainWindow):
             dialog.activateWindow()
             result = dialog.execute(
                 "open_application",
-                {"app": requested_app},
-                f"open {requested_app}",
+                {"app_id": requested_app["app_id"]},
+                f"open {app_name}",
             )
             reply = (
-                f"Opened {requested_app.title()}."
+                f"Opened {app_name}."
                 if result
-                else f"I didn't open {requested_app.title()}. The action was cancelled or blocked."
+                else f"I didn't open {app_name}. The action was cancelled or blocked."
             )
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
