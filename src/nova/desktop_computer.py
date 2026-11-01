@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
-_HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(20.0, connect=5.0))
+_HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(120.0, connect=5.0))
 
 
 class ComputerControlsDialog(QDialog):
@@ -22,7 +22,7 @@ class ComputerControlsDialog(QDialog):
         layout = QVBoxLayout(self)
         intro = QLabel(
             "These tools are deliberately limited. Every operation requires your confirmation. "
-            "File access is restricted to folders listed in NOVA_COMPUTER_ALLOWED_ROOTS."
+            "NOVA discovers accessible local drives by default. Opening and reading items requires confirmation."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -61,7 +61,7 @@ class ComputerControlsDialog(QDialog):
             data = self.request("GET", "/computer/capabilities")
             roots = data.get("file_roots", [])
             self.status.setText(
-                "Approved folders:\n" + ("\n".join(roots) if roots else "None configured — file tools are disabled.")
+                "Accessible drives / configured folders:\n" + ("\n".join(roots) if roots else "No accessible locations found.")
                 + f"\n\nDiscovered applications: {data.get('application_count', len(data.get('applications', [])))}"
             )
             return data
@@ -133,7 +133,7 @@ class ComputerControlsDialog(QDialog):
         capabilities = self.refresh_capabilities()
         roots = capabilities.get("file_roots", [])
         if not roots:
-            QMessageBox.information(self, "No approved folders", "Add one or more folders to NOVA_COMPUTER_ALLOWED_ROOTS in your private .env file, then restart the backend.")
+            QMessageBox.information(self, "No approved folders", "No accessible drives or folders were discovered.")
             return
         path, accepted = QInputDialog.getItem(self, "List folder", "Choose an approved folder:", roots, 0, False)
         if accepted:
@@ -143,7 +143,7 @@ class ComputerControlsDialog(QDialog):
         capabilities = self.refresh_capabilities()
         roots = capabilities.get("file_roots", [])
         if not roots:
-            QMessageBox.information(self, "No approved folders", "Add folders to NOVA_COMPUTER_ALLOWED_ROOTS in your private .env file, then restart the backend.")
+            QMessageBox.information(self, "No approved folders", "No accessible drives or folders were discovered.")
             return
         root, accepted = QInputDialog.getItem(self, "Search files", "Search inside:", roots, 0, False)
         if not accepted:
