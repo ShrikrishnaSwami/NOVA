@@ -916,9 +916,18 @@ class NovaWindow(QMainWindow):
             project_root = Path(__file__).resolve().parents[2]
         try:
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            child_environment = os.environ.copy()
+            try:
+                import psutil
+                child_environment["NOVA_PARENT_PID"] = str(os.getpid())
+                child_environment["NOVA_PARENT_CREATE_TIME"] = str(psutil.Process().create_time())
+            except Exception:
+                child_environment.pop("NOVA_PARENT_PID", None)
+                child_environment.pop("NOVA_PARENT_CREATE_TIME", None)
             self._backend_process = subprocess.Popen(
                 command,
                 cwd=str(project_root),
+                env=child_environment,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
