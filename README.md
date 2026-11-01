@@ -18,6 +18,8 @@ The project is in active early development. The current release includes a local
 - SQLite-backed persistent conversations and user-controlled long-term memories.
 - Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
 - Memory review, approval, editing, and deletion API.
+- Permission-gated computer tools for allowlisted apps and explicitly approved folders.
+- Local audit log for completed or blocked computer operations.
 
 ## Requirements
 
@@ -113,6 +115,30 @@ Useful endpoints:
 - `DELETE /memory/{id}` — delete a memory.
 - `GET /conversations` and `GET /conversations/{id}` — browse saved conversations.
 - `DELETE /conversations/{id}` — delete a conversation and its messages.
+
+## Computer controls (Stage 4)
+
+Open **Computer controls** in the desktop sidebar. NOVA currently supports:
+
+- Open Notepad, Calculator, Paint, or File Explorer from a fixed application allowlist.
+- List folders, search file/folder names, and read selected text files inside explicitly approved roots.
+- Ask for a separate confirmation before every operation.
+- Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
+
+File access is disabled by default. Add only folders you want NOVA to access to your private `.env` file. Separate multiple paths with semicolons:
+
+```dotenv
+NOVA_COMPUTER_ALLOWED_ROOTS=C:\\Users\\YourName\\Documents;C:\\Users\\YourName\\Desktop
+```
+
+Replace the example paths with real folders on your computer, then restart the backend. The desktop dialog shows the active approved roots. NOVA can read only TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, and INI files up to 64 KB. Search results are capped at 200. Paths are resolved and checked against approved roots to prevent traversal and symlink escapes.
+
+The API rejects operations unless the desktop sends an explicit approval flag. The model does not invoke these tools automatically in this milestone. No arbitrary shell, PowerShell, command execution, or model-selected executable paths are exposed.
+
+Useful endpoints:
+- `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
+- `POST /computer/actions` — execute one registered action after approval.
+- `GET /computer/audit` — inspect recent local action records.
 
 ## Local model benchmarking
 
