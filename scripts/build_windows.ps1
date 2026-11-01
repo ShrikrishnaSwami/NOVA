@@ -28,4 +28,17 @@ python -m PyInstaller @pyinstallerArgs
 if (-not (Test-Path "dist/NOVA/NOVA.exe")) {
   throw "PyInstaller did not produce dist/NOVA/NOVA.exe"
 }
+# Bundle the small, local English Vosk model so voice works after installation
+# without asking the user to download model files or edit source code.
+$modelName = "vosk-model-small-en-us-0.15"
+$modelArchive = Join-Path $env:TEMP "$modelName.zip"
+$modelUrl = "https://alphacephei.com/vosk/models/$modelName.zip"
+$modelExtract = Join-Path $env:TEMP "nova-vosk-model"
+Invoke-WebRequest -Uri $modelUrl -OutFile $modelArchive
+if (Test-Path $modelExtract) { Remove-Item $modelExtract -Recurse -Force }
+Expand-Archive -Path $modelArchive -DestinationPath $modelExtract -Force
+Copy-Item (Join-Path $modelExtract $modelName) (Join-Path (Resolve-Path "dist/NOVA") $modelName) -Recurse -Force
+Remove-Item $modelArchive -Force
+Remove-Item $modelExtract -Recurse -Force
+
 Write-Host "NOVA packaged successfully at dist/NOVA"
