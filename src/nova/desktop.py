@@ -458,13 +458,15 @@ class NovaWindow(QMainWindow):
             return
 
         # Match launch requests against the live Windows Start Menu catalogue.
+        discovery_error = None
         try:
             capabilities_response = _HTTP_CLIENT.get(f"{API_ROOT}/computer/capabilities")
             capabilities_response.raise_for_status()
             discovered_apps = capabilities_response.json().get("applications", [])
             requested_app = match_open_application_command(message, discovered_apps)
-        except Exception:
+        except Exception as exc:
             requested_app = None
+            discovery_error = str(exc)
 
         if requested_app:
             app_name = requested_app["name"]
@@ -495,11 +497,18 @@ class NovaWindow(QMainWindow):
             self.input.clear()
             self._add_message("YOU", message)
             self.history.append({"role": "user", "content": message})
-            reply = (
-                f"I couldn't find an installed app matching '{unresolved_target}'. "
-                "Open Computer controls to inspect the discovered app list. "
-                "NOVA won't claim it opened an app unless Windows launch was actually requested."
-            )
+            if discovery_error:
+                reply = (
+                    "I couldn't check the installed-app list because NOVA couldn't reach its "
+                    f"computer-controls API ({discovery_error}). Make sure NOVA's backend is "
+                    "running, then try again."
+                )
+            else:
+                reply = (
+                    f"I couldn't find an installed app matching '{unresolved_target}' in the "
+                    "Windows app catalogue. Open Computer controls and refresh the list. "
+                    "NOVA won't claim it opened an app unless Windows launch was actually requested."
+                )
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText(reply)
