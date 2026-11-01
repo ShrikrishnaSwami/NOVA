@@ -133,7 +133,7 @@ NOVA_COMPUTER_ALLOWED_ROOTS=C:\\Users\\YourName\\Documents;C:\\Users\\YourName\\
 
 Replace the example paths with real folders on your computer, then restart the backend. The desktop dialog shows the active approved roots. NOVA can read only TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, and INI files up to 64 KB. Search results are capped at 200. Paths are resolved and checked against approved roots to prevent traversal and symlink escapes.
 
-The API rejects operations unless the desktop sends an explicit approval flag. Simple, exact app-launch phrases such as “open calculator”, “launch Notepad”, and “start Paint” are recognized locally and routed through the same approval prompt rather than sent to the model. Other requests still use normal chat. No arbitrary shell, PowerShell, command execution, or model-selected executable paths are exposed.
+The API rejects operations unless the desktop sends an explicit approval flag. NOVA matches exact app names against its live Start Menu catalogue, so phrases such as “open Spotify” or “launch Google Chrome” use the same confirmation prompt. Launching uses the discovered `.lnk` shortcut through the Windows Shell; arbitrary shell commands, PowerShell, and model-selected executable paths are not exposed. Apps without a Windows Start Menu shortcut are not currently included.
 
 Useful endpoints:
 - `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
