@@ -158,3 +158,29 @@ def test_duplicate_memory_is_not_inserted_twice(tmp_path) -> None:
     assert duplicate["duplicate"] is True
     assert first["id"] == duplicate["id"]
     assert len(store.list_memories()) == 1
+
+
+def test_conversations_can_be_searched_renamed_and_pinned(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "conversation-tools.sqlite3")
+    store.record_turn("first", "Discuss NOVA automation", "We discussed the desktop assistant.")
+    store.record_turn("second", "Plan a study session", "We discussed course notes.")
+
+    assert [item["id"] for item in store.search_conversations("desktop assistant")] == ["first"]
+    assert store.rename_conversation("second", "  Study   planning  ")
+    assert store.pin_conversation("second", True)
+    conversations = store.list_conversations()
+    assert conversations[0]["id"] == "second"
+    assert conversations[0]["title"] == "Study planning"
+    assert conversations[0]["pinned"] == 1
+
+
+def test_conversation_title_validation_and_missing_records(tmp_path) -> None:
+    store = MemoryStore(tmp_path / "conversation-tools.sqlite3")
+    try:
+        store.rename_conversation("missing", "   ")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Empty titles should be rejected.")
+    assert not store.rename_conversation("missing", "A title")
+    assert not store.pin_conversation("missing", True)

@@ -74,3 +74,24 @@ def test_memory_endpoints_support_pinning_and_stats(tmp_path, monkeypatch) -> No
     unpinned = client.patch(f"/memory/{memory['id']}/pin", json={"pinned": False})
     assert unpinned.status_code == 200
     assert unpinned.json()["pinned"] is False
+
+
+def test_conversation_search_rename_and_pin_endpoints(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "api-conversation-tools.sqlite3"
+    monkeypatch.setattr(memory_api, "get_settings", lambda: TestSettings(str(database)))
+    store = MemoryStore(database)
+    store.record_turn("conversation-one", "Discuss NOVA automation", "We discussed desktop assistant control.")
+
+    client = TestClient(app)
+    search = client.get("/conversations/search?q=desktop%20assistant")
+    assert search.status_code == 200
+    assert search.json()["conversations"][0]["id"] == "conversation-one"
+
+    renamed = client.patch("/conversations/conversation-one", json={"title": "NOVA project notes"})
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "NOVA project notes"
+
+    pinned = client.patch("/conversations/conversation-one/pin", json={"pinned": True})
+    assert pinned.status_code == 200
+    assert pinned.json()["pinned"] is True
+    assert client.get("/conversations").json()["conversations"][0]["pinned"] is True

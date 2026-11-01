@@ -124,6 +124,9 @@ class MemoryStore:
                 """
             )
             # Additive migrations preserve existing local memory databases.
+            conversation_columns = {row["name"] for row in db.execute("PRAGMA table_info(conversations)")}
+            if "pinned" not in conversation_columns:
+                db.execute("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(memories)")}
             if "last_accessed_at" not in columns:
                 db.execute("ALTER TABLE memories ADD COLUMN last_accessed_at TEXT")
@@ -324,10 +327,47 @@ class MemoryStore:
     def list_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC LIMIT ?",
+                "SELECT id, title, created_at, updated_at, pinned FROM conversations "
+                "ORDER BY pinned DESC, updated_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def search_conversations(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Search conversation titles and message text, returning newest matches."""
+        term = query.strip()
+        if not term:
+            return self.list_conversations(limit)
+        pattern = f"%{term}%"
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT DISTINCT c.id, c.title, c.created_at, c.updated_at, c.pinned
+                   FROM conversations c
+                   LEFT JOIN messages m ON m.conversation_id = c.id
+                   WHERE c.title LIKE ? ESCAPE '\\' OR m.content LIKE ? ESCAPE '\\'
+                   ORDER BY c.pinned DESC, c.updated_at DESC LIMIT ?""",
+                (pattern, pattern, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def rename_conversation(self, conversation_id: str, title: str) -> bool:
+        normalized = " ".join(title.split())[:100]
+        if len(normalized) < 1:
+            raise ValueError("Conversation title cannot be empty.")
+        with self._connect() as db:
+            cursor = db.execute(
+                "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+                (normalized, _now(), conversation_id),
+            )
+            return cursor.rowcount > 0
+
+    def pin_conversation(self, conversation_id: str, pinned: bool = True) -> bool:
+        with self._connect() as db:
+            cursor = db.execute(
+                "UPDATE conversations SET pinned = ? WHERE id = ?",
+                (1 if pinned else 0, conversation_id),
+            )
+            return cursor.rowcount > 0
 
     def get_messages(self, conversation_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:

@@ -1689,28 +1689,43 @@ class NovaWindow(QMainWindow):
         description = QLabel("Open a previous conversation saved in NOVA's local SQLite database.")
         description.setObjectName("muted")
         layout.addWidget(description)
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Search titles and conversation messages…")
+        layout.addWidget(search_input)
         items = QListWidget()
         layout.addWidget(items, 1)
+        conversations_cache: list[dict[str, Any]] = []
 
-        def refresh() -> None:
+        def render_conversations() -> None:
             items.clear()
-            try:
-                response = _HTTP_CLIENT.get(f"{API_ROOT}/conversations")
-                response.raise_for_status()
-                conversations = response.json().get("conversations", [])
-            except Exception as exc:
-                QMessageBox.warning(dialog, "History unavailable", str(exc))
-                return
-            for conversation in conversations:
-                item = QListWidgetItem(conversation.get("title", "Conversation"))
+            for conversation in conversations_cache:
+                prefix = "★ PINNED · " if conversation.get("pinned") else ""
+                item = QListWidgetItem(prefix + conversation.get("title", "Conversation"))
                 item.setData(Qt.ItemDataRole.UserRole, conversation)
                 items.addItem(item)
 
+        def refresh() -> None:
+            try:
+                response = _HTTP_CLIENT.get(
+                    f"{API_ROOT}/conversations/search",
+                    params={"q": search_input.text().strip()},
+                )
+                response.raise_for_status()
+                conversations_cache[:] = response.json().get("conversations", [])
+            except Exception as exc:
+                QMessageBox.warning(dialog, "History unavailable", str(exc))
+                return
+            render_conversations()
+
         actions = QHBoxLayout()
         load_button = QPushButton("Open conversation")
+        rename_button = QPushButton("Rename")
+        pin_button = QPushButton("Pin / unpin")
         delete_button = QPushButton("Delete")
         close_button = QPushButton("Close")
         actions.addWidget(load_button)
+        actions.addWidget(rename_button)
+        actions.addWidget(pin_button)
         actions.addWidget(delete_button)
         actions.addStretch()
         actions.addWidget(close_button)
@@ -1747,6 +1762,41 @@ class NovaWindow(QMainWindow):
             except Exception as exc:
                 QMessageBox.warning(dialog, "Could not open conversation", str(exc))
 
+        def rename() -> None:
+            conversation = selected_conversation()
+            if not conversation:
+                return
+            title, accepted = QInputDialog.getText(
+                dialog, "Rename conversation", "Conversation title:",
+                text=conversation.get("title", ""),
+            )
+            if not accepted:
+                return
+            try:
+                response = _HTTP_CLIENT.patch(
+                    f"{API_ROOT}/conversations/{conversation['id']}",
+                    json={"title": title},
+                )
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not rename conversation", str(exc))
+
+        def toggle_pin() -> None:
+            conversation = selected_conversation()
+            if not conversation:
+                return
+            pinned = not bool(conversation.get("pinned"))
+            try:
+                response = _HTTP_CLIENT.patch(
+                    f"{API_ROOT}/conversations/{conversation['id']}/pin",
+                    json={"pinned": pinned},
+                )
+                response.raise_for_status()
+                refresh()
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Could not pin conversation", str(exc))
+
         def delete() -> None:
             conversation = selected_conversation()
             if not conversation:
@@ -1761,7 +1811,10 @@ class NovaWindow(QMainWindow):
             except Exception as exc:
                 QMessageBox.warning(dialog, "Could not delete conversation", str(exc))
 
+        search_input.textChanged.connect(lambda _text: render_conversations())
         load_button.clicked.connect(load)
+        rename_button.clicked.connect(rename)
+        pin_button.clicked.connect(toggle_pin)
         delete_button.clicked.connect(delete)
         close_button.clicked.connect(dialog.accept)
         items.itemDoubleClicked.connect(lambda _item: load())

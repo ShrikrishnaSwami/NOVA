@@ -40,6 +40,14 @@ class MemoryPin(BaseModel):
     pinned: bool
 
 
+class ConversationTitle(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+
+
+class ConversationPin(BaseModel):
+    pinned: bool
+
+
 @router.patch("/memory/{memory_id}/pin")
 def pin_memory(memory_id: str, request: MemoryPin) -> dict:
     if not _store().pin_memory(memory_id, request.pinned):
@@ -75,6 +83,32 @@ def delete_memory(memory_id: str) -> dict:
 @router.get("/conversations")
 def list_conversations(limit: int = Query(default=50, ge=1, le=200)) -> dict:
     return {"conversations": _store().list_conversations(limit)}
+
+
+@router.get("/conversations/search")
+def search_conversations(
+    q: str = Query(default="", max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    return {"query": q, "conversations": _store().search_conversations(q, limit)}
+
+
+@router.patch("/conversations/{conversation_id}")
+def rename_conversation(conversation_id: str, request: ConversationTitle) -> dict:
+    try:
+        updated = _store().rename_conversation(conversation_id, request.title)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"id": conversation_id, "title": " ".join(request.title.split())[:100]}
+
+
+@router.patch("/conversations/{conversation_id}/pin")
+def pin_conversation(conversation_id: str, request: ConversationPin) -> dict:
+    if not _store().pin_conversation(conversation_id, request.pinned):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"id": conversation_id, "pinned": request.pinned}
 
 
 @router.get("/conversations/{conversation_id}")
