@@ -100,7 +100,7 @@ class ComputerToolRegistry:
         safe_parameters = {
             key: str(value)[:500]
             for key, value in parameters.items()
-            if key in {"app", "path", "root", "query"}
+            if key in {"app", "app_id", "path", "root", "query"}
         }
         with self._connect() as db:
             db.execute(
