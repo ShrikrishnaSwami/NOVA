@@ -1,3 +1,8 @@
+import os
+
+# Keep the test suite independent of a developer's local .env model settings.
+os.environ["NOVA_AI_PROVIDER"] = "echo"
+
 from fastapi.testclient import TestClient
 
 from nova.main import app
