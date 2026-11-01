@@ -79,8 +79,11 @@ def control_computer_window(request: WindowControlRequest) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="Window control requires explicit approval in the NOVA desktop interface.")
     from nova.core.computer.window_control import WindowControlError, control_window
     try:
-        return control_window(request.handle, request.action)
+        result = control_window(request.handle, request.action)
+        _registry()._audit("control_window", {}, "success", result["message"])
+        return result
     except WindowControlError as exc:
+        _registry()._audit("control_window", {}, "blocked", str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
