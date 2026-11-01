@@ -16,7 +16,6 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QCheckBox,
     QInputDialog,
     QListWidget,
     QListWidgetItem,
