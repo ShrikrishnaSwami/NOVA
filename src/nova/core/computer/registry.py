@@ -77,6 +77,71 @@ def _registered_start_apps() -> list[dict[str, str]]:
     return apps
 
 
+def _installed_registry_apps() -> list[dict[str, str]]:
+    """Discover classic desktop apps from Windows uninstall and App Paths registry keys."""
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    results: dict[str, dict[str, str]] = {}
+    uninstall_roots = (
+        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+    )
+    for hive, subkey in uninstall_roots:
+        try:
+            with winreg.OpenKey(hive, subkey) as root:
+                count = winreg.QueryInfoKey(root)[0]
+                for index in range(count):
+                    try:
+                        child_name = winreg.EnumKey(root, index)
+                        with winreg.OpenKey(root, child_name) as entry:
+                            name = str(winreg.QueryValueEx(entry, "DisplayName")[0]).strip()
+                            icon = str(winreg.QueryValueEx(entry, "DisplayIcon")[0]).strip().strip('"')
+                        if not name or not icon:
+                            continue
+                        # DisplayIcon can end with an icon resource index, e.g. app.exe,0.
+                        icon = re.sub(r",\\s*-?\\d+\\s*$", "", icon).strip().strip('"')
+                        executable = Path(os.path.expandvars(icon))
+                        if executable.is_file() and executable.suffix.lower() == ".exe":
+                            key = str(executable.resolve()).casefold()
+                            results.setdefault(key, {"name": name, "app_id": "exe:" + str(executable.resolve())})
+                    except (OSError, ValueError, TypeError):
+                        continue
+        except OSError:
+            continue
+
+    app_path_roots = (
+        (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"),
+    )
+    for hive, subkey in app_path_roots:
+        try:
+            with winreg.OpenKey(hive, subkey) as root:
+                count = winreg.QueryInfoKey(root)[0]
+                for index in range(count):
+                    try:
+                        child_name = winreg.EnumKey(root, index)
+                        with winreg.OpenKey(root, child_name) as entry:
+                            raw_path = str(winreg.QueryValueEx(entry, "")[0]).strip().strip('"')
+                        executable = Path(os.path.expandvars(raw_path))
+                        if executable.is_file() and executable.suffix.lower() == ".exe":
+                            key = str(executable.resolve()).casefold()
+                            results.setdefault(key, {
+                                "name": Path(child_name).stem,
+                                "app_id": "exe:" + str(executable.resolve()),
+                            })
+                    except (OSError, ValueError, TypeError):
+                        continue
+        except OSError:
+            continue
+    return list(results.values())
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -167,7 +232,7 @@ class ComputerToolRegistry:
                         break
                 if len(found) >= _MAX_APPLICATIONS:
                     break
-        for app in _registered_start_apps():
+        for app in _registered_start_apps() + _installed_registry_apps():
             key = app["app_id"].casefold()
             found.setdefault(key, app)
         apps = sorted(found.values(), key=lambda item: item["name"].casefold())
@@ -213,6 +278,11 @@ class ComputerToolRegistry:
                 app = selected["name"]
                 if app_id == _WINDOWS_SETTINGS_ID:
                     subprocess.Popen(["explorer.exe", "ms-settings:"], shell=False, close_fds=True)
+                elif app_id.startswith("exe:"):
+                    executable = Path(app_id.removeprefix("exe:")).resolve(strict=True)
+                    if not executable.is_file() or executable.suffix.lower() != ".exe":
+                        raise ComputerToolError("The registered application executable is no longer available.")
+                    subprocess.Popen([str(executable)], shell=False, close_fds=True)
                 elif app_id.startswith("startapp:"):
                     registered_id = app_id.removeprefix("startapp:")
                     if Path(registered_id).is_file() and Path(registered_id).suffix.lower() == ".lnk":
