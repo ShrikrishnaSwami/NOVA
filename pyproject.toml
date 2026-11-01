@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nova-assistant"
-version = "0.2.0"
+version = "0.3.0"
 description = "An open-source hybrid AI desktop assistant."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,12 @@ dependencies = [
 dev = [
     "pytest>=8.0,<9.0",
 ]
+desktop = [
+    "PySide6>=6.8,<7.0",
+]
+
+[project.scripts]
+nova-desktop = "nova.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,389 @@
+"""NOVA's lightweight Windows desktop client."""
+
+from __future__ import annotations
+
+import os
+import sys
+from typing import Any
+
+import httpx
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+
+API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+class ApiWorker(QThread):
+    completed = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, endpoint: str, payload: dict[str, Any] | None = None) -> None:
+        super().__init__()
+        self.endpoint = endpoint
+        self.payload = payload
+
+    def run(self) -> None:
+        try:
+            with httpx.Client(timeout=150.0) as client:
+                if self.payload is None:
+                    response = client.get(f"{API_ROOT}{self.endpoint}")
+                else:
+                    response = client.post(
+                        f"{API_ROOT}{self.endpoint}", json=self.payload
+                    )
+                response.raise_for_status()
+                self.completed.emit(response.json())
+        except httpx.ConnectError:
+            self.failed.emit("NOVA's backend is offline. Start the API server first.")
+        except httpx.TimeoutException:
+            self.failed.emit("The request timed out. Check that your local model is running.")
+        except httpx.HTTPStatusError as exc:
+            detail = "The backend returned an error."
+            try:
+                detail = str(exc.response.json().get("detail", detail))
+            except ValueError:
+                pass
+            self.failed.emit(detail)
+        except Exception as exc:  # Keep unexpected failures visible without crashing the UI.
+            self.failed.emit(f"Unexpected error: {exc}")
+
+
+class NovaOrb(QWidget):
+    """Simple animated identity visual; deliberately lightweight for integrated GPUs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setMinimumSize(190, 190)
+        self.phase = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.advance)
+        self.timer.start(45)
+
+    def advance(self) -> None:
+        self.phase = (self.phase + 2) % 360
+        self.update()
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx, cy = self.width() / 2, self.height() / 2
+        radius = min(self.width(), self.height()) * 0.31
+        glow = QRadialGradient(cx, cy, radius * 1.8)
+        glow.setColorAt(0.0, QColor(41, 176, 255, 90))
+        glow.setColorAt(0.55, QColor(74, 91, 255, 35))
+        glow.setColorAt(1.0, QColor(10, 15, 35, 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(glow)
+        painter.drawEllipse(int(cx - radius * 1.8), int(cy - radius * 1.8),
+                            int(radius * 3.6), int(radius * 3.6))
+
+        painter.setBrush(QColor(9, 19, 42))
+        painter.setPen(QPen(QColor(75, 190, 255, 210), 2))
+        painter.drawEllipse(int(cx - radius), int(cy - radius),
+                            int(radius * 2), int(radius * 2))
+
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(104, 220, 255, 190), 2))
+        painter.drawArc(int(cx - radius * 1.18), int(cy - radius * 1.18),
+                        int(radius * 2.36), int(radius * 2.36),
+                        self.phase * 16, 210 * 16)
+        painter.setPen(QPen(QColor(119, 115, 255, 170), 2))
+        painter.drawArc(int(cx - radius * 1.32), int(cy - radius * 1.32),
+                        int(radius * 2.64), int(radius * 2.64),
+                        -self.phase * 12, 125 * 16)
+
+        core = QRadialGradient(cx - radius * 0.18, cy - radius * 0.2, radius)
+        core.setColorAt(0.0, QColor(185, 245, 255, 230))
+        core.setColorAt(0.35, QColor(49, 169, 255, 180))
+        core.setColorAt(1.0, QColor(35, 70, 170, 20))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(core)
+        painter.drawEllipse(int(cx - radius * 0.58), int(cy - radius * 0.58),
+                            int(radius * 1.16), int(radius * 1.16))
+
+
+class NovaWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("NOVA — Personal AI")
+        self.resize(1180, 780)
+        self.setMinimumSize(900, 620)
+        self.history: list[dict[str, str]] = []
+        self.worker: ApiWorker | None = None
+        self._build_ui()
+        self._check_status()
+
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._check_status)
+        self.status_timer.start(15000)
+
+    def _build_ui(self) -> None:
+        root = QWidget()
+        root.setObjectName("root")
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(230)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(22, 26, 22, 22)
+        side.setSpacing(16)
+
+        brand = QLabel("N O V A")
+        brand.setObjectName("brand")
+        side.addWidget(brand)
+        tagline = QLabel("PERSONAL INTELLIGENCE")
+        tagline.setObjectName("eyebrow")
+        side.addWidget(tagline)
+        side.addSpacing(26)
+
+        new_chat = QPushButton("+   New conversation")
+        new_chat.setObjectName("newChat")
+        new_chat.clicked.connect(self._new_chat)
+        side.addWidget(new_chat)
+
+        nav_label = QLabel("WORKSPACE")
+        nav_label.setObjectName("eyebrow")
+        side.addSpacing(22)
+        side.addWidget(nav_label)
+        nav = QLabel("◉   Assistant\n\n◷   Conversation history\n\n⌘   Capabilities")
+        nav.setObjectName("navText")
+        side.addWidget(nav)
+        side.addStretch()
+
+        self.backend_label = QLabel("●  BACKEND CHECKING")
+        self.backend_label.setObjectName("statusPill")
+        side.addWidget(self.backend_label)
+        footer = QLabel("LOCAL-FIRST  •  OPEN SOURCE")
+        footer.setObjectName("footer")
+        side.addWidget(footer)
+        outer.addWidget(sidebar)
+
+        main = QWidget()
+        main_layout = QVBoxLayout(main)
+        main_layout.setContentsMargins(34, 24, 34, 24)
+        main_layout.setSpacing(18)
+
+        header = QHBoxLayout()
+        heading_box = QVBoxLayout()
+        heading = QLabel("Assistant")
+        heading.setObjectName("pageTitle")
+        subheading = QLabel("Your personal intelligence, running on your machine.")
+        subheading.setObjectName("muted")
+        heading_box.addWidget(heading)
+        heading_box.addWidget(subheading)
+        header.addLayout(heading_box)
+        header.addStretch()
+        self.model_badge = QLabel("MODEL  •  CONNECTING")
+        self.model_badge.setObjectName("modelBadge")
+        header.addWidget(self.model_badge, alignment=Qt.AlignmentFlag.AlignVCenter)
+        main_layout.addLayout(header)
+
+        hero = QFrame()
+        hero.setObjectName("hero")
+        hero_layout = QHBoxLayout(hero)
+        hero_layout.setContentsMargins(26, 12, 34, 12)
+        hero_layout.setSpacing(24)
+        self.orb = NovaOrb()
+        hero_layout.addWidget(self.orb, alignment=Qt.AlignmentFlag.AlignCenter)
+        hero_copy = QVBoxLayout()
+        hero_copy.addStretch()
+        hero_title = QLabel("Always within reach.")
+        hero_title.setObjectName("heroTitle")
+        hero_text = QLabel("Ask a question, explore an idea, or get help with your day.\nNOVA is ready when you are.")
+        hero_text.setObjectName("muted")
+        hero_text.setWordWrap(True)
+        hero_copy.addWidget(hero_title)
+        hero_copy.addWidget(hero_text)
+        hero_copy.addSpacing(8)
+        self.connection_label = QLabel("Waiting for local model status…")
+        self.connection_label.setObjectName("connection")
+        hero_copy.addWidget(self.connection_label)
+        hero_copy.addStretch()
+        hero_layout.addLayout(hero_copy, 1)
+        main_layout.addWidget(hero)
+
+        chat_heading = QLabel("CONVERSATION")
+        chat_heading.setObjectName("eyebrow")
+        main_layout.addWidget(chat_heading)
+
+        self.chat_area = QScrollArea()
+        self.chat_area.setWidgetResizable(True)
+        self.chat_area.setObjectName("chatArea")
+        self.chat_content = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_content)
+        self.chat_layout.setContentsMargins(8, 8, 8, 8)
+        self.chat_layout.setSpacing(12)
+        self.chat_layout.addStretch()
+        self.chat_area.setWidget(self.chat_content)
+        main_layout.addWidget(self.chat_area, 1)
+
+        composer = QFrame()
+        composer.setObjectName("composer")
+        composer_layout = QHBoxLayout(composer)
+        composer_layout.setContentsMargins(14, 10, 10, 10)
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Message NOVA…")
+        self.input.returnPressed.connect(self._send_message)
+        self.input.setObjectName("messageInput")
+        composer_layout.addWidget(self.input, 1)
+        self.send_button = QPushButton("Send  ↗")
+        self.send_button.setObjectName("sendButton")
+        self.send_button.clicked.connect(self._send_message)
+        composer_layout.addWidget(self.send_button)
+        main_layout.addWidget(composer)
+
+        hint = QLabel("Enter to send  ·  Your conversation is sent to the configured local AI endpoint.")
+        hint.setObjectName("hint")
+        main_layout.addWidget(hint)
+        outer.addWidget(main, 1)
+        self.setCentralWidget(root)
+
+        self.setStyleSheet("""
+            QWidget#root { background: #080d18; color: #e8f1ff; font-family: 'Segoe UI'; }
+            QFrame#sidebar { background: #0b1221; border-right: 1px solid #1b2b43; }
+            QLabel#brand { color: #eaf7ff; font-size: 23px; font-weight: 700; letter-spacing: 3px; }
+            QLabel#eyebrow { color: #7188a8; font-size: 10px; font-weight: 700; letter-spacing: 2px; }
+            QLabel#footer, QLabel#hint { color: #647894; font-size: 10px; }
+            QLabel#navText { color: #9aacc5; font-size: 13px; line-height: 1.5; }
+            QPushButton#newChat { background: #14243a; border: 1px solid #29415f; border-radius: 9px; padding: 12px; color: #d9efff; text-align: left; }
+            QPushButton#newChat:hover { background: #1b3452; }
+            QLabel#pageTitle { font-size: 25px; font-weight: 650; color: #f0f6ff; }
+            QLabel#muted { color: #8ea2bd; font-size: 12px; }
+            QLabel#modelBadge, QLabel#statusPill { color: #8de5ff; background: #10263a; border: 1px solid #214b68; border-radius: 10px; padding: 8px 11px; font-size: 10px; font-weight: 700; }
+            QFrame#hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #101d32, stop:1 #11172c); border: 1px solid #203653; border-radius: 16px; }
+            QLabel#heroTitle { color: #eff8ff; font-size: 22px; font-weight: 600; }
+            QLabel#connection { color: #79dfff; font-size: 11px; }
+            QScrollArea#chatArea { border: none; background: transparent; }
+            QFrame#messageUser { background: #142b45; border: 1px solid #244766; border-radius: 12px; }
+            QFrame#messageAssistant { background: #101a2b; border: 1px solid #1e3049; border-radius: 12px; }
+            QLabel#messageRole { color: #7fdcff; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+            QLabel#messageText { color: #e4edf9; font-size: 13px; }
+            QFrame#composer { background: #0e1929; border: 1px solid #263c58; border-radius: 12px; }
+            QLineEdit#messageInput { background: transparent; border: none; color: #f0f6ff; padding: 8px; font-size: 13px; }
+            QPushButton#sendButton { background: #167bb5; border: none; border-radius: 8px; color: white; padding: 10px 18px; font-weight: 650; }
+            QPushButton#sendButton:hover { background: #2195d4; }
+            QPushButton:disabled { background: #26384c; color: #7b8ca1; }
+        """)
+
+    def _add_message(self, role: str, content: str) -> None:
+        card = QFrame()
+        card.setObjectName("messageUser" if role == "YOU" else "messageAssistant")
+        card.setMaximumWidth(760)
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 12, 16, 12)
+        label = QLabel(role)
+        label.setObjectName("messageRole")
+        body = QLabel(content)
+        body.setObjectName("messageText")
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(label)
+        layout.addWidget(body)
+        row = QHBoxLayout()
+        if role == "YOU":
+            row.addStretch()
+        row.addWidget(card, 0 if role == "YOU" else 1)
+        if role != "YOU":
+            row.addStretch()
+        self.chat_layout.insertLayout(self.chat_layout.count() - 1, row)
+        QTimer.singleShot(30, lambda: self.chat_area.verticalScrollBar().setValue(
+            self.chat_area.verticalScrollBar().maximum()
+        ))
+
+    def _send_message(self) -> None:
+        message = self.input.text().strip()
+        if not message or (self.worker and self.worker.isRunning()):
+            return
+        self.input.clear()
+        self._add_message("YOU", message)
+        self.history.append({"role": "user", "content": message})
+        self.send_button.setEnabled(False)
+        self.send_button.setText("Thinking…")
+        self.connection_label.setText("NOVA is thinking with your configured model…")
+        self.worker = ApiWorker("/chat", {"message": message, "history": self.history[:-1][-20:]})
+        self.worker.completed.connect(self._chat_completed)
+        self.worker.failed.connect(self._request_failed)
+        self.worker.finished.connect(self._request_finished)
+        self.worker.start()
+
+    def _chat_completed(self, data: dict) -> None:
+        reply = str(data.get("reply", "The model returned an empty response."))
+        self._add_message("NOVA", reply)
+        self.history.append({"role": "assistant", "content": reply})
+        self.model_badge.setText(f"MODEL  •  {data.get('model', 'CONNECTED')}")
+        self.connection_label.setText(f"Response generated by {data.get('provider', 'configured provider')}.")
+
+    def _request_failed(self, message: str) -> None:
+        self._add_message("SYSTEM", message)
+        self.connection_label.setText(message)
+
+    def _request_finished(self) -> None:
+        self.send_button.setEnabled(True)
+        self.send_button.setText("Send  ↗")
+        self.input.setFocus()
+
+    def _check_status(self) -> None:
+        if self.worker and self.worker.isRunning():
+            return
+        self.worker = ApiWorker("/system/ai")
+        self.worker.completed.connect(self._status_completed)
+        self.worker.failed.connect(self._status_failed)
+        self.worker.start()
+
+    def _status_completed(self, data: dict) -> None:
+        provider = str(data.get("provider", "unknown"))
+        model = str(data.get("model", "unknown"))
+        self.backend_label.setText("●  BACKEND ONLINE")
+        self.model_badge.setText(f"MODEL  •  {model}")
+        self.connection_label.setText(
+            f"{'Model configured' if data.get('configured') else 'Setup mode'} · {provider}"
+        )
+
+    def _status_failed(self, message: str) -> None:
+        self.backend_label.setText("●  BACKEND OFFLINE")
+        self.model_badge.setText("MODEL  •  DISCONNECTED")
+        self.connection_label.setText(message)
+
+    def _new_chat(self) -> None:
+        self.history.clear()
+        while self.chat_layout.count() > 1:
+            item = self.chat_layout.takeAt(0)
+            if item.layout():
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                item.layout().deleteLater()
+        self._add_message("NOVA", "New conversation started. How can I help?")
+        self.input.setFocus()
+
+
+def main() -> None:
+    app = QApplication(sys.argv)
+    app.setApplicationName("NOVA")
+    app.setFont(QFont("Segoe UI", 10))
+    window = NovaWindow()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

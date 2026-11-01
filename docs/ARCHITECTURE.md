@@ -2,7 +2,16 @@
 
 ## Runtime
 
-The first milestone is a local FastAPI process. The future desktop client will communicate with this process over loopback HTTP. The API binds to `127.0.0.1` by default.
+NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional PySide6 desktop client communicates with that process over loopback HTTP. The UI does not call the model runtime directly; model access remains behind the backend provider interface.
+
+## Desktop client
+
+- Entry point: `nova-desktop` (module: `nova.desktop`).
+- Optional dependency group: `desktop` installs PySide6.
+- The desktop client uses a worker thread for HTTP requests so model inference does not freeze the UI.
+- The animated identity visual is drawn with Qt primitives to avoid external assets and keep GPU requirements modest.
+- The UI stores conversation history in memory for the current desktop session only. Durable memory is a separate future service.
+- The backend URL can be overridden with `NOVA_API_URL`.
 
 ## AI provider layer
 
@@ -11,36 +20,29 @@ NOVA defines a provider contract in `src/nova/core/ai/types.py`. Provider implem
 The current adapters are:
 
 - `echo`: safe setup mode that lets a fresh installation exercise the chat API without credentials.
-- `openai_compatible`: adapter for local model servers and compatible hosted APIs using the chat-completions request format. It can connect to a local runtime such as LM Studio or llama.cpp server, or a compatible cloud endpoint.
+- `openai_compatible`: adapter for local model servers and compatible hosted APIs using the chat-completions request format. It can connect to a local runtime such as Bionic, LM Studio, or llama.cpp server, or a compatible cloud endpoint.
 
 Provider selection is controlled by environment variables. No API key is required for local endpoints that do not use authentication. Credentials belong in the local `.env` file and must never be committed.
 
-## Planned request flow
+## Request flow
 
 ```text
-Desktop UI (future)
-      |
-      v
-Local API
-      |
-      v
-Conversation orchestrator
-      |
-      +---- Model router ---- Local model adapter
-      |                   \-- Cloud model adapter
-      |
-      +---- Memory service ---- SQLite (planned)
-      |
-      +---- Tool registry
-                 |
-                 v
-          Permission manager
-                 |
-          User approval gate
-                 |
-                 v
-           Tool execution
+PySide6 desktop UI
+       |
+       v
+Local FastAPI API (loopback)
+       |
+       v
+Conversation endpoint
+       |
+       v
+Provider adapter
+       |
+       v
+Bionic / local model runtime
 ```
+
+Planned services will add memory and permission-scoped tools beside the provider adapter.
 
 ## Trust boundaries
 
@@ -56,9 +58,9 @@ Conversation orchestrator
 
 1. API and configuration foundation.
 2. Provider contract, setup-mode chat, and OpenAI-compatible adapter.
-3. Local model runtime and cloud provider-specific adapters.
-4. SQLite memory with explicit retention and deletion controls.
-5. Permission manager, tool registry, and audit log.
-6. Streaming text conversation.
-7. Voice pipeline and desktop UI.
-8. Small, allowlisted Windows tools.
+3. Local model runtime integration.
+4. First desktop UI with threaded API requests.
+5. SQLite memory with explicit retention and deletion controls.
+6. Permission manager, tool registry, and audit log.
+7. Streaming text conversation.
+8. Voice pipeline and small, allowlisted Windows tools.
