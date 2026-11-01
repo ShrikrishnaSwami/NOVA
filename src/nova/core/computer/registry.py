@@ -18,6 +18,7 @@ _MAX_READ_BYTES = 2 * 1024 * 1024
 _MAX_SEARCH_RESULTS = 500
 _TEXT_SUFFIXES.update({".html", ".htm", ".xml", ".sql", ".js", ".ts", ".tsx", ".jsx", ".css", ".java", ".c", ".cpp", ".h", ".hpp", ".ps1", ".bat", ".sh", ".rtf"})
 _MAX_APPLICATIONS = 2000
+_DOCUMENT_SUFFIXES = {".pdf", ".docx", ".xlsx", ".xlsm"}
 
 
 def _start_shortcut(path: str) -> None:
@@ -187,6 +188,52 @@ def _installed_registry_apps() -> list[dict[str, str]]:
             except OSError:
                 continue
     return list(results.values())
+
+
+def _extract_document_text(path: Path) -> str:
+    """Extract bounded text from common local document formats using optional libraries."""
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:
+            raise ComputerToolError("PDF reading requires: pip install -e '.[documents]'") from exc
+        reader = PdfReader(str(path))
+        return "\n\n".join((page.extract_text() or "") for page in reader.pages[:100])[:500_000]
+    if suffix == ".docx":
+        try:
+            from docx import Document
+        except ImportError as exc:
+            raise ComputerToolError("Word reading requires: pip install -e '.[documents]'") from exc
+        document = Document(str(path))
+        parts = [paragraph.text for paragraph in document.paragraphs]
+        for table in document.tables[:100]:
+            for row in table.rows[:500]:
+                parts.append(" | ".join(cell.text for cell in row.cells))
+        return "\n".join(parts)[:500_000]
+    if suffix in {".xlsx", ".xlsm"}:
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise ComputerToolError("Excel reading requires: pip install -e '.[documents]'") from exc
+        workbook = load_workbook(path, read_only=True, data_only=True)
+        parts = []
+        try:
+            for sheet in workbook.worksheets[:30]:
+                parts.append(f"[Sheet: {sheet.title}]")
+                for row_index, row in enumerate(sheet.iter_rows(values_only=True)):
+                    if row_index >= 5000:
+                        break
+                    values = [str(value) for value in row if value is not None]
+                    if values:
+                        parts.append(" | ".join(values))
+                    if sum(len(part) for part in parts) >= 500_000:
+                        break
+        finally:
+            workbook.close()
+        return "\n".join(parts)[:500_000]
+    raise ComputerToolError("This document format is not supported for local text extraction.")
+
 
 def _accessible_computer_roots() -> list[Path]:
     """Return ready local drive roots on Windows, or the user home elsewhere."""
@@ -427,12 +474,16 @@ class ComputerToolRegistry:
                         directories[:] = [name for name in directories if not _is_link_or_junction(current_path / name)]
                         for name in files:
                             candidate = current_path / name
-                            if candidate.suffix.lower() not in _TEXT_SUFFIXES or _is_link_or_junction(candidate):
+                            if candidate.suffix.lower() not in (_TEXT_SUFFIXES | _DOCUMENT_SUFFIXES) or _is_link_or_junction(candidate):
                                 continue
                             try:
                                 if candidate.stat().st_size > _MAX_READ_BYTES:
                                     continue
-                                text = candidate.read_text(encoding="utf-8-sig", errors="ignore")
+                                text = (
+                                    _extract_document_text(candidate)
+                                    if candidate.suffix.lower() in _DOCUMENT_SUFFIXES
+                                    else candidate.read_text(encoding="utf-8-sig", errors="ignore")
+                                )
                                 if query in text.casefold():
                                     matches.append({"path": str(candidate), "preview": text[:240].replace("\\n", " ")})
                             except (OSError, UnicodeError):
@@ -446,12 +497,16 @@ class ComputerToolRegistry:
                 result = {"query": query, "matches": matches, "truncated": len(matches) >= _MAX_SEARCH_RESULTS}
             elif action == "read_text_file":
                 file_path = self._resolve_allowed_path(str(parameters.get("path", "")))
-                if not file_path.is_file() or file_path.suffix.lower() not in _TEXT_SUFFIXES:
-                    raise ComputerToolError("NOVA can only read supported text formats up to 2 MB.")
+                if not file_path.is_file() or file_path.suffix.lower() not in (_TEXT_SUFFIXES | _DOCUMENT_SUFFIXES):
+                    raise ComputerToolError("NOVA can only read supported text and document formats up to 2 MB.")
                 size = file_path.stat().st_size
                 if size > _MAX_READ_BYTES:
                     raise ComputerToolError("That file is larger than NOVA's 2 MB reading limit.")
-                content = file_path.read_text(encoding="utf-8-sig")
+                content = (
+                    _extract_document_text(file_path)
+                    if file_path.suffix.lower() in _DOCUMENT_SUFFIXES
+                    else file_path.read_text(encoding="utf-8-sig")
+                )
                 result = {"path": str(file_path), "content": content}
             else:
                 raise ComputerToolError("Unknown computer action.")
