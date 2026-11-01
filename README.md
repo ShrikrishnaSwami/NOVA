@@ -61,7 +61,7 @@ The installer:
 - Keeps SQLite memory under `%LOCALAPPDATA%\\NOVA`, separate from the installed application.
 - Can be uninstalled through Windows Settings → Apps → Installed apps.
 
-The installed application runs in the signed-in user's desktop session. It is not a privileged Windows service: desktop UI Automation and notification APIs need the interactive user's session. NOVA starts a separate loopback-only API process when needed and stops only the process it owns when you explicitly quit.
+The installed application runs in the signed-in user's desktop session. It is not a privileged Windows service: desktop UI Automation and notification APIs need the interactive user's session. Notification preferences are stored locally in `%APPDATA%\\NOVA\\preferences.json`. NOVA starts a separate loopback-only API process when needed and stops only the process it owns when you explicitly quit.
 
 After installation, open **NOVA → Open NOVA settings** from the tray menu to edit the per-user `.env` file. The default template is configured for the local Bionic OpenAI-compatible endpoint at `http://127.0.0.1:1235/v1` with model `qwen3-1.7b`. Start Bionic and load that model before asking NOVA to use local AI. If your local runtime uses a different model or port, update the settings file and restart NOVA.
 
@@ -166,7 +166,7 @@ Useful endpoints:
 - NOVA starts in the current signed-in user's desktop session, keeps one instance per user, and can run hidden in the notification area.
 - `Ctrl+Alt+Space` reopens the UI; closing the window hides it, while **Quit NOVA** stops the desktop and its own API child process.
 - Optional sign-in startup is controlled from the tray menu and writes only the current user's NOVA startup entry.
-- Native toast notifications can be tested from the tray menu. Windows may still require notifications to be enabled in **Settings → System → Notifications**.
+- NOVA-generated reply notifications are off by default and can be explicitly enabled from the tray menu. A one-off test notification is available there too; Windows may still require notifications to be enabled in **Settings → System → Notifications**.
 - The shared automation engine publishes its bounded action contracts at `GET /computer/automation/capabilities`. Multi-step plans are validated as a whole, capped at five steps, and stop after the first cancelled or failed action.
 - Battery and active-window awareness are opt-in and session-scoped.
 
