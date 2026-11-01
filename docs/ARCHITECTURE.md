@@ -115,3 +115,8 @@ This is a local-user permission boundary, not a hardened multi-user security bou
 ## Natural-language computer planner
 
 The first planner layer is deterministic and deliberately narrow. It recognizes filename searches, content searches, and explicit full-path open/read/list requests, then proposes typed actions to the desktop. It does not execute actions or treat model output as authority. The desktop shows a one-action confirmation before the API call; file contents remain local in the computer-controls panel. Filename search can scan all configured/accessibly discovered roots when no root is supplied. More conversational multi-step planning, Windows Search integration, OCR, and app/window automation remain later milestones.
+
+
+## Windows OS awareness
+
+The first OS-introspection module is `src/nova/core/computer/windows.py`. It provides a read-only system overview, bounded process inventory via optional psutil, and visible top-level/foreground window metadata via the Windows user32 API. Process command lines and environment variables are intentionally excluded. API endpoints are `GET /computer/system`, `GET /computer/processes`, and `GET /computer/windows`. This does not yet control windows, synthesize keyboard/mouse input, inspect protected process memory, or subscribe to OS events.
