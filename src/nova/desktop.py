@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from uuid import uuid4
 from typing import Any
 
 import httpx
@@ -58,7 +59,7 @@ class ApiWorker(QThread):
                             metadata = event
                         elif event.get("type") == "error":
                             raise RuntimeError(str(event.get("message", "Streaming failed.")))
-                self.completed.emit({"reply": "", "provider": metadata.get("provider", "unknown"), "model": metadata.get("model", "unknown"), "ttft_ms": metadata.get("ttft_ms"), "total_ms": metadata.get("total_ms")})
+                self.completed.emit({"reply": "", "provider": metadata.get("provider", "unknown"), "model": metadata.get("model", "unknown"), "conversation_id": metadata.get("conversation_id"), "memory": metadata.get("memory"), "ttft_ms": metadata.get("ttft_ms"), "total_ms": metadata.get("total_ms")})
                 return
             if self.payload is None:
                 response = _HTTP_CLIENT.get(f"{API_ROOT}{self.endpoint}")
@@ -141,6 +142,7 @@ class NovaWindow(QMainWindow):
         self.resize(1180, 780)
         self.setMinimumSize(900, 620)
         self.history: list[dict[str, str]] = []
+        self.conversation_id = str(uuid4())
         self.worker: ApiWorker | None = None
         self._build_ui()
         self._check_status()
@@ -267,7 +269,7 @@ class NovaWindow(QMainWindow):
         composer_layout.addWidget(self.send_button)
         main_layout.addWidget(composer)
 
-        hint = QLabel("Enter to send  ·  Your conversation is sent to the configured local AI endpoint.")
+        hint = QLabel("Enter to send  ·  Conversations and approved memories are stored locally on this device.")
         hint.setObjectName("hint")
         main_layout.addWidget(hint)
         outer.addWidget(main, 1)
@@ -338,7 +340,7 @@ class NovaWindow(QMainWindow):
         self.send_button.setText("Thinking…")
         self.connection_label.setText("NOVA is generating…")
         self.streaming_body = self._add_message("NOVA", "")
-        self.worker = ApiWorker("/chat/stream", {"message": message, "history": self.history[:-1][-20:]}, streaming=True)
+        self.worker = ApiWorker("/chat/stream", {"message": message, "history": self.history[:-1][-20:], "conversation_id": self.conversation_id}, streaming=True)
         self.worker.token.connect(self._append_stream_token)
         self.worker.completed.connect(self._chat_completed)
         self.worker.failed.connect(self._request_failed)
@@ -351,6 +353,7 @@ class NovaWindow(QMainWindow):
 
     def _chat_completed(self, data: dict) -> None:
         reply = self.streaming_body.text()
+        self.conversation_id = str(data.get("conversation_id") or self.conversation_id)
         if not reply:
             reply = str(data.get("reply", "The model returned an empty response."))
             self.streaming_body.setText(reply)
@@ -398,6 +401,7 @@ class NovaWindow(QMainWindow):
 
     def _new_chat(self) -> None:
         self.history.clear()
+        self.conversation_id = str(uuid4())
         while self.chat_layout.count() > 1:
             item = self.chat_layout.takeAt(0)
             if item.layout():
