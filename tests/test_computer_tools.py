@@ -162,13 +162,13 @@ def test_discover_apps_includes_classic_registry_installations(tmp_path, monkeyp
     monkeypatch.setattr(
         computer_registry,
         "_installed_registry_apps",
-        lambda: [{"name": "Notion", "app_id": "exe:C:\\Program Files\\Notion\\Notion.exe"}],
+        lambda: [{"name": "Notion", "app_id": r"exe:C:\Program Files\Notion\Notion.exe"}],
     )
 
     registry = ComputerToolRegistry(tmp_path / "audit.sqlite3")
     apps = registry.discover_applications()
 
-    assert {"name": "Notion", "app_id": "exe:C:\\Program Files\\Notion\\Notion.exe"} in apps
+    assert {"name": "Notion", "app_id": r"exe:C:\Program Files\Notion\Notion.exe"} in apps
 
 
 def test_registered_executable_launch_requires_discovery_and_uses_no_shell(tmp_path, monkeypatch) -> None:
