@@ -28,8 +28,6 @@ _ACTIONS = {
         ActionContract("window.minimize", "Minimize a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
         ActionContract("window.maximize", "Maximize a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
         ActionContract("window.restore", "Restore a window", "/computer/windows/actions", frozenset({"handle", "action", "approved"})),
-        ActionContract("app.activate_control", "Activate an accessible application control", "/computer/windows/controls/actions", frozenset({"handle", "name", "control_type", "approved"})),
-        ActionContract("app.enter_text", "Enter text into a non-password field", "/computer/windows/controls/text", frozenset({"handle", "name", "text", "approved"})),
     )
 }
 
