@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from typing import Any
@@ -27,26 +28,44 @@ from PySide6.QtWidgets import (
 API_ROOT = os.getenv("NOVA_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
+_HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(150.0, connect=5.0))
+
+
 class ApiWorker(QThread):
     completed = Signal(dict)
     failed = Signal(str)
+    token = Signal(str)
 
-    def __init__(self, endpoint: str, payload: dict[str, Any] | None = None) -> None:
+    def __init__(self, endpoint: str, payload: dict[str, Any] | None = None, *, streaming: bool = False) -> None:
         super().__init__()
         self.endpoint = endpoint
         self.payload = payload
+        self.streaming = streaming
 
     def run(self) -> None:
         try:
-            with httpx.Client(timeout=150.0) as client:
-                if self.payload is None:
-                    response = client.get(f"{API_ROOT}{self.endpoint}")
-                else:
-                    response = client.post(
-                        f"{API_ROOT}{self.endpoint}", json=self.payload
-                    )
-                response.raise_for_status()
-                self.completed.emit(response.json())
+            if self.streaming and self.payload is not None:
+                with _HTTP_CLIENT.stream("POST", f"{API_ROOT}{self.endpoint}", json=self.payload) as response:
+                    response.raise_for_status()
+                    metadata: dict[str, Any] = {}
+                    for line in response.iter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        event = json.loads(line[5:].strip())
+                        if event.get("type") == "token":
+                            self.token.emit(str(event.get("content", "")))
+                        elif event.get("type") == "done":
+                            metadata = event
+                        elif event.get("type") == "error":
+                            raise RuntimeError(str(event.get("message", "Streaming failed.")))
+                self.completed.emit({"reply": "", "provider": metadata.get("provider", "unknown"), "model": metadata.get("model", "unknown"), "ttft_ms": metadata.get("ttft_ms"), "total_ms": metadata.get("total_ms")})
+                return
+            if self.payload is None:
+                response = _HTTP_CLIENT.get(f"{API_ROOT}{self.endpoint}")
+            else:
+                response = _HTTP_CLIENT.post(f"{API_ROOT}{self.endpoint}", json=self.payload)
+            response.raise_for_status()
+            self.completed.emit(response.json())
         except httpx.ConnectError:
             self.failed.emit("NOVA's backend is offline. Start the API server first.")
         except httpx.TimeoutException:
@@ -58,9 +77,8 @@ class ApiWorker(QThread):
             except ValueError:
                 pass
             self.failed.emit(detail)
-        except Exception as exc:  # Keep unexpected failures visible without crashing the UI.
-            self.failed.emit(f"Unexpected error: {exc}")
-
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 class NovaOrb(QWidget):
     """Simple animated identity visual; deliberately lightweight for integrated GPUs."""
@@ -282,7 +300,7 @@ class NovaWindow(QMainWindow):
             QPushButton:disabled { background: #26384c; color: #7b8ca1; }
         """)
 
-    def _add_message(self, role: str, content: str) -> None:
+    def _add_message(self, role: str, content: str) -> QLabel:
         card = QFrame()
         card.setObjectName("messageUser" if role == "YOU" else "messageAssistant")
         card.setMaximumWidth(760)
@@ -307,6 +325,7 @@ class NovaWindow(QMainWindow):
         QTimer.singleShot(30, lambda: self.chat_area.verticalScrollBar().setValue(
             self.chat_area.verticalScrollBar().maximum()
         ))
+        return body
 
     def _send_message(self) -> None:
         message = self.input.text().strip()
@@ -317,22 +336,37 @@ class NovaWindow(QMainWindow):
         self.history.append({"role": "user", "content": message})
         self.send_button.setEnabled(False)
         self.send_button.setText("Thinking…")
-        self.connection_label.setText("NOVA is thinking with your configured model…")
-        self.worker = ApiWorker("/chat", {"message": message, "history": self.history[:-1][-20:]})
+        self.connection_label.setText("NOVA is generating…")
+        self.streaming_body = self._add_message("NOVA", "")
+        self.worker = ApiWorker("/chat/stream", {"message": message, "history": self.history[:-1][-20:]}, streaming=True)
+        self.worker.token.connect(self._append_stream_token)
         self.worker.completed.connect(self._chat_completed)
         self.worker.failed.connect(self._request_failed)
         self.worker.finished.connect(self._request_finished)
         self.worker.start()
 
+    def _append_stream_token(self, token: str) -> None:
+        self.streaming_body.setText(self.streaming_body.text() + token)
+        QTimer.singleShot(10, lambda: self.chat_area.verticalScrollBar().setValue(self.chat_area.verticalScrollBar().maximum()))
+
     def _chat_completed(self, data: dict) -> None:
-        reply = str(data.get("reply", "The model returned an empty response."))
-        self._add_message("NOVA", reply)
+        reply = self.streaming_body.text()
+        if not reply:
+            reply = str(data.get("reply", "The model returned an empty response."))
+            self.streaming_body.setText(reply)
         self.history.append({"role": "assistant", "content": reply})
         self.model_badge.setText(f"MODEL  •  {data.get('model', 'CONNECTED')}")
-        self.connection_label.setText(f"Response generated by {data.get('provider', 'configured provider')}.")
+        ttft, total = data.get("ttft_ms"), data.get("total_ms")
+        if ttft is not None and total is not None:
+            self.connection_label.setText(f"First token: {ttft} ms · Total: {total} ms · {data.get('provider', 'provider')}")
+        else:
+            self.connection_label.setText(f"Response generated by {data.get('provider', 'configured provider')}.")
 
     def _request_failed(self, message: str) -> None:
-        self._add_message("SYSTEM", message)
+        if hasattr(self, "streaming_body") and not self.streaming_body.text():
+            self.streaming_body.setText(message)
+        else:
+            self._add_message("SYSTEM", message)
         self.connection_label.setText(message)
 
     def _request_finished(self) -> None:
