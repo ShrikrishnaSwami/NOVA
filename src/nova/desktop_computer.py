@@ -60,7 +60,7 @@ class ComputerControlsDialog(QDialog):
             roots = data.get("file_roots", [])
             self.status.setText(
                 "Approved folders:\n" + ("\n".join(roots) if roots else "None configured — file tools are disabled.")
-                + "\n\nAllowed applications: " + ", ".join(data.get("applications", []))
+                + f"\n\nDiscovered applications: {data.get('application_count', len(data.get('applications', [])))}"
             )
             return data
         except Exception as exc:
@@ -116,9 +116,16 @@ class ComputerControlsDialog(QDialog):
         apps = capabilities.get("applications", [])
         if not apps:
             return
-        app, accepted = QInputDialog.getItem(self, "Open application", "Choose an allowlisted app:", apps, 0, False)
+        labels = [item.get("name", "Unnamed app") for item in apps]
+        app_name, accepted = QInputDialog.getItem(self, "Open application", "Choose an installed app:", labels, 0, False)
         if accepted:
-            self.execute("open_application", {"app": app}, f"open {app}")
+            selected = next((item for item in apps if item.get("name") == app_name), None)
+            if selected:
+                self.execute(
+                    "open_application",
+                    {"app_id": selected["app_id"]},
+                    f"open {app_name}",
+                )
 
     def list_folder(self) -> None:
         capabilities = self.refresh_capabilities()
