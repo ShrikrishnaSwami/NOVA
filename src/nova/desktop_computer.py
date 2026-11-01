@@ -93,7 +93,7 @@ class ComputerControlsDialog(QDialog):
                 self.status.setText(f"Contents of {result['path']}")
             elif "matches" in result:
                 for match in result["matches"]:
-                    self.output.addItem(match)
+                    self.output.addItem(match.get("path", "") + " — " + match.get("preview", "") if isinstance(match, dict) else str(match))
                 self.status.setText(f"{len(result['matches'])} matching paths found.")
             elif "content" in result:
                 self.output.addItem(f"File: {result['path']}")
