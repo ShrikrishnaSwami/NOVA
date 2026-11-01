@@ -351,7 +351,7 @@ class ComputerToolRegistry:
                 if selected is None:
                     raise ComputerToolError("That application is no longer in the current installed-app catalogue. Refresh the app list and try again.")
                 app = selected["name"]
-                if os.name != "nt" or not hasattr(os, "startfile"):
+                if not hasattr(os, "startfile"):
                     raise ComputerToolError("Windows application launching is only available on Windows.")
                 if app_id == _WINDOWS_SETTINGS_ID:
                     os.startfile("ms-settings:")
