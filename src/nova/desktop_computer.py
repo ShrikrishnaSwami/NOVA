@@ -309,7 +309,9 @@ class ComputerControlsDialog(QDialog):
             }[action]
             answer = QMessageBox.question(
                 self, "Approve window control?",
-                f"NOVA will {action.lower()} this window:\n\n{target.get('title')}\n\nAllow this one action?",
+                f"NOVA will {action.lower()} this window:\n\n{target.get('title')}\n\n"
+                + ("The app may prompt you to save changes. NOVA will not force-quit it.\n\n" if action_id == "close" else "")
+                + "Allow this one action?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

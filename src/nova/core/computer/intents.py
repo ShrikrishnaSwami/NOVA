@@ -191,7 +191,7 @@ def plan_window_intent(message: str) -> dict[str, str] | None:
     text = message.strip()
     match = re.fullmatch(
         r"(?:hey[, ]+nova[, ]+)?(?:please\s+)?"
-        r"(?:switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore)\s+"
+        r"(?:switch\s+to|focus\s+on|bring\s+up|minimize|maximize|restore|close)\s+"
         r"(?:the\s+)?(.+?)(?:\s+window)?[.!?]*",
         text, re.IGNORECASE,
     )
