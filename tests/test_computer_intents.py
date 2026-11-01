@@ -54,3 +54,26 @@ def test_application_candidates_match_short_app_names() -> None:
     assert application_candidates("Launch Chrome", apps) == [apps[0]]
     assert application_candidates("Open Word", apps) == [apps[1]]
     assert application_candidates("Open Studio Code", apps) == [apps[2]]
+
+
+def test_planner_recognizes_filename_and_content_search() -> None:
+    from nova.core.computer.intents import plan_computer_intent
+
+    filename = plan_computer_intent("Hey NOVA, find my physics assignment")
+    assert filename == {
+        "action": "search_files",
+        "parameters": {"query": "physics assignment"},
+        "description": "search all accessible drives for files or folders matching 'physics assignment'",
+    }
+    contents = plan_computer_intent("Search inside my files for thermodynamics")
+    assert contents["action"] == "search_file_contents"
+    assert contents["parameters"] == {"query": "thermodynamics"}
+
+
+def test_planner_requires_explicit_paths_for_open_and_read() -> None:
+    from nova.core.computer.intents import plan_computer_intent
+
+    assert plan_computer_intent(r"Open C:\Users\Apha\Documents\notes.txt")["action"] == "open_path"
+    assert plan_computer_intent(r"Read C:\Users\Apha\Documents\notes.txt")["action"] == "read_text_file"
+    assert plan_computer_intent("Open my private files") is None
+    assert plan_computer_intent("Delete C:\Users\Apha\Documents\notes.txt") is None
