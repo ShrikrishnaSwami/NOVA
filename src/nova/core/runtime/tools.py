@@ -136,6 +136,40 @@ class SimulationCore:
 def build_default_registry(simulation: SimulationCore | None = None) -> ToolRegistry:
     core = simulation or SimulationCore()
     registry = ToolRegistry()
+    # Read-only tools expose real information from the signed-in user session.
+    # They remain subject to the same explicit approval gate as every tool chain.
+    from nova.core.computer.windows import (
+        foreground_window,
+        list_processes,
+        list_windows,
+        system_overview,
+    )
+
+    registry.register(ToolSpec(
+        name="system.overview",
+        description="Read a compact, local snapshot of the operating system and hardware resources.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler=lambda _args: system_overview(),
+    ))
+    registry.register(ToolSpec(
+        name="system.processes",
+        description="List up to 30 visible process names, IDs, status, and memory use. Does not read command lines or environment variables.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler=lambda _args: {"processes": list_processes(30)},
+    ))
+    registry.register(ToolSpec(
+        name="windows.foreground",
+        description="Read the title and process ID of the current foreground window.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler=lambda _args: {"foreground": foreground_window()},
+    ))
+    registry.register(ToolSpec(
+        name="windows.list_visible",
+        description="List up to 30 visible titled application windows and their process IDs.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler=lambda _args: {"windows": list_windows(30)},
+    ))
+
     for subsystem, operations in {
         "aerospace": ["diagnostics", "standby", "engage_simulation"],
         "smart_grid": ["diagnostics", "balance_simulation"],
