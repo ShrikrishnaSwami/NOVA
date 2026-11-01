@@ -164,6 +164,12 @@ def _accessible_computer_roots() -> list[Path]:
             roots.append(home.resolve())
     return roots
 
+def _is_link_or_junction(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(is_junction and is_junction())
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -376,7 +382,7 @@ class ComputerToolRegistry:
                 for root in self.allowed_roots:
                     for current, directories, files in os.walk(root, followlinks=False):
                         current_path = Path(current)
-                        directories[:] = [name for name in directories if not (current_path / name).is_symlink() and not (current_path / name).is_junction()]
+                        directories[:] = [name for name in directories if not _is_link_or_junction(current_path / name)]
                         for name in files:
                             candidate = current_path / name
                             if candidate.suffix.lower() not in _TEXT_SUFFIXES or candidate.is_symlink():
@@ -399,7 +405,7 @@ class ComputerToolRegistry:
             elif action == "read_text_file":
                 file_path = self._resolve_allowed_path(str(parameters.get("path", "")))
                 if not file_path.is_file() or file_path.suffix.lower() not in _TEXT_SUFFIXES:
-                    raise ComputerToolError("NOVA can only read approved text formats (TXT, MD, PY, JSON, CSV, LOG, YAML, TOML, INI).")
+                    raise ComputerToolError("NOVA can only read supported text formats up to 2 MB.")
                 size = file_path.stat().st_size
                 if size > _MAX_READ_BYTES:
                     raise ComputerToolError("That file is larger than NOVA's 64 KB reading limit.")
