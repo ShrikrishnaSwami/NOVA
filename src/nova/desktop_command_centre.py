@@ -256,7 +256,3 @@ class NovaCommandCentre(QDialog):
     def _command_completed(self, reply: str) -> None:
         self.reply.setText(reply)
         self._append_log("Response received from the configured NOVA model.")
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self.showFullScreen()
