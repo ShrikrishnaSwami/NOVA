@@ -1226,6 +1226,8 @@ class NovaWindow(QMainWindow):
         self.connection_label.setText("Wake phrase detected. Listening for your command…")
 
     def _wake_word_recognized(self, phrase: str) -> None:
+        if self.wake_thread and self.wake_thread.isRunning():
+            self.wake_thread.stop()
         self.input.setText(phrase)
         self.connection_label.setText("Command recognized locally. Sending to NOVA…")
         self._send_message()
