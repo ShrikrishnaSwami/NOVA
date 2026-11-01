@@ -37,3 +37,15 @@ def test_rejects_more_than_five_calls():
     calls = [{"name": "simulation.thermal", "arguments": {"operation": "diagnostics"}}] * 6
     with pytest.raises(ValueError, match="invalid tool-call list"):
         validate_proposal({"tool_calls": calls}, build_default_registry())
+
+
+
+def test_real_read_only_system_tool_is_registered_and_requires_approval():
+    registry = build_default_registry()
+    assert "system.overview" in {item["name"] for item in registry.describe()}
+    calls = [{"name": "system.overview", "arguments": {}}]
+    with pytest.raises(PermissionError, match="approval"):
+        registry.execute_chain(calls, approved=False)
+    results = registry.execute_chain(calls, approved=True)
+    assert results[0]["tool"] == "system.overview"
+    assert "platform" in results[0]["result"]
