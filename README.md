@@ -128,13 +128,13 @@ Open **Computer controls** in the desktop sidebar. The current OS-discovery foun
 NOVA_COMPUTER_ALLOWED_ROOTS=C:\\Users\\YourName\\Documents;C:\\Users\\YourName\\Desktop
 ```
 
-- Search file and folder names, search inside supported local text files, list folders, read supported text files up to 2 MB, and request Windows to open a discovered path.
+- Search file and folder names, search inside supported text/code and PDF/Word/Excel documents, list folders, read supported files up to 2 MB, and ask Windows to open a discovered path.
 - Require a separate confirmation before opening or reading items. Search is read-only; inaccessible or protected locations are skipped by Windows permissions.
 - Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
 
-The current content-search formats include TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, INI, HTML, XML, SQL, JavaScript, TypeScript, CSS, Java, C/C++, PowerShell, batch, shell, and RTF. Results are capped at 500. This is the first OS-wide discovery layer, not yet a full Windows Search index or universal document parser; PDF and Office document content indexing and richer semantic retrieval are planned next.
+Text/code search supports TXT, Markdown, Python, JSON, CSV, LOG, YAML, TOML, INI, HTML, XML, SQL, JavaScript, TypeScript, CSS, Java, C/C++, PowerShell, batch, shell, and RTF. PDF, DOCX, XLSX and XLSM extraction is available through free local libraries. Install it with `pip install -e ".[documents]"`. PDF extraction is bounded to 100 pages; spreadsheets are bounded to 30 sheets and 5,000 rows per sheet. Search results are capped at 500. This is still not a full Windows Search index, OCR system, or semantic document index.
 
-The API rejects actions unless the desktop sends an explicit approval flag. App launch requests resolve against the live Windows application catalogue. NOVA does not expose arbitrary shell commands or let the model execute arbitrary executable paths.
+The API rejects actions unless the desktop sends an explicit approval flag. App launch requests resolve against the live Windows application catalogue. Classic apps are discovered through Start Menu shortcuts, Windows Start Apps, uninstall metadata, install locations and App Paths. Launches use the Windows Shell rather than constructing shell commands. If multiple installed apps match a request, NOVA asks you to choose.
 
 Useful endpoints:
 - `GET /computer/capabilities` — inspect allowlisted apps and approved roots.
