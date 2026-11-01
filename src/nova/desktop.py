@@ -901,12 +901,12 @@ class NovaWindow(QMainWindow):
         }:
             self.connection_label.setText("Backend auto-start skipped because NOVA_API_URL points to a different server.")
             return
-        project_root = Path(__file__).resolve().parents[2]
-        command = [
-            sys.executable, "-m", "uvicorn", "nova.main:app",
-            "--host", settings.host, "--port", str(settings.port),
-            "--no-access-log",
-        ]
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, "--nova-backend"]
+            project_root = Path(sys.executable).resolve().parent
+        else:
+            command = [sys.executable, "-m", "nova.service"]
+            project_root = Path(__file__).resolve().parents[2]
         try:
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             self._backend_process = subprocess.Popen(
@@ -927,6 +927,9 @@ class NovaWindow(QMainWindow):
         if process is not None and process.poll() is None:
             try:
                 process.terminate()
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
             except OSError:
                 pass
         self._backend_process = None
@@ -1231,11 +1234,19 @@ class NovaWindow(QMainWindow):
 
 
 def main() -> None:
+    if "--nova-backend" in sys.argv:
+        from nova.service import main as run_service
+        run_service()
+        return
+
     app = QApplication(sys.argv)
     app.setApplicationName("NOVA")
+    app.setOrganizationName("NOVA")
     app.setFont(QFont("Segoe UI", 10))
+    app.setQuitOnLastWindowClosed(False)
     window = NovaWindow()
-    window.show()
+    if "--background" not in sys.argv:
+        window.show()
     sys.exit(app.exec())
 
 
