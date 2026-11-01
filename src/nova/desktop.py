@@ -46,7 +46,7 @@ from PySide6.QtWidgets import (
 )
 
 
-from nova.core.computer.shell_integration import ShellIntegrationError, notifications_enabled, set_notifications_enabled, set_startup_enabled, startup_enabled, show_windows_toast
+from nova.core.computer.shell_integration import ShellIntegrationError, notifications_enabled, set_notifications_enabled, set_startup_enabled, startup_enabled, show_windows_toast, wake_word_enabled, set_wake_word_enabled
 
 
 _SETTINGS = get_settings()
@@ -348,6 +348,8 @@ class NovaWindow(QMainWindow):
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._check_status)
         self.status_timer.start(15000)
+        if wake_word_enabled():
+            QTimer.singleShot(2500, self._start_wake_word)
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -1104,6 +1106,10 @@ class NovaWindow(QMainWindow):
             self.streaming_body.setText(reply)
         self.history.append({"role": "assistant", "content": reply})
         self.last_response_text = reply
+        if wake_word_enabled():
+            if self.wake_thread and self.wake_thread.isRunning():
+                self.wake_thread.stop()
+            self._speak_text(reply, resume_wake=True)
         if self.isHidden() and notifications_enabled():
             try:
                 show_windows_toast("NOVA has replied", reply[:350])
@@ -1173,18 +1179,12 @@ class NovaWindow(QMainWindow):
         self.connection_label.setText(message)
         QMessageBox.warning(self, "Voice input", message)
 
-    def _toggle_wake_word(self) -> None:
+    def _start_wake_word(self) -> None:
         if self.wake_thread and self.wake_thread.isRunning():
-            self.wake_thread.stop()
-            self.wake_button.setText("◉  Wake word off")
-            self.connection_label.setText("Stopping local wake-word listener…")
             return
         model_path = get_settings().vosk_model_path.strip()
         if not model_path:
-            QMessageBox.information(
-                self, "Set up local voice",
-                "Set NOVA_VOSK_MODEL_PATH to your extracted Vosk model folder first.",
-            )
+            self.connection_label.setText("Wake word is enabled, but NOVA_VOSK_MODEL_PATH is not configured.")
             return
         self.wake_thread = WakeWordWorker(model_path)
         self.wake_thread.activated.connect(self._wake_word_activated)
@@ -1196,6 +1196,27 @@ class NovaWindow(QMainWindow):
         self.wake_thread.finished.connect(lambda: self.wake_button.setText("◉  Wake word off"))
         self.wake_button.setText("■  Wake word on")
         self.wake_thread.start()
+
+    def _toggle_wake_word(self) -> None:
+        if self.wake_thread and self.wake_thread.isRunning():
+            set_wake_word_enabled(False)
+            self.wake_thread.stop()
+            self.wake_button.setText("◉  Wake word off")
+            self.connection_label.setText("Stopping local wake-word listener…")
+            return
+        model_path = get_settings().vosk_model_path.strip()
+        if not model_path:
+            QMessageBox.information(
+                self, "Set up local voice",
+                "Set NOVA_VOSK_MODEL_PATH to your extracted Vosk model folder first.",
+            )
+            return
+        try:
+            set_wake_word_enabled(True)
+        except ShellIntegrationError as exc:
+            QMessageBox.warning(self, "Wake-word settings", str(exc))
+            return
+        self._start_wake_word()
 
     def _wake_word_activated(self) -> None:
         self._stop_speech_output()
@@ -1210,6 +1231,23 @@ class NovaWindow(QMainWindow):
         if self.speech_worker and self.speech_worker.isRunning():
             self.speech_worker.stop()
 
+    def _speak_text(self, text: str, *, resume_wake: bool = False) -> None:
+        self.speech_worker = SpeechOutputWorker(text)
+        self.speech_worker.failed.connect(self.connection_label.setText)
+        self.speech_worker.finished_speaking.connect(
+            lambda: self.speak_button.setText("🔊  Read last reply")
+        )
+        if resume_wake:
+            self.speech_worker.finished_speaking.connect(
+                lambda: QTimer.singleShot(500, self._resume_wake_word)
+            )
+        self.speak_button.setText("■  Stop speaking")
+        self.speech_worker.start()
+
+    def _resume_wake_word(self) -> None:
+        if wake_word_enabled() and not (self.wake_thread and self.wake_thread.isRunning()):
+            self._start_wake_word()
+
     def _speak_last_response(self) -> None:
         if not self.last_response_text.strip():
             QMessageBox.information(self, "Nothing to read", "NOVA has not produced a response yet.")
@@ -1218,13 +1256,7 @@ class NovaWindow(QMainWindow):
             self._stop_speech_output()
             self.speak_button.setText("🔊  Read last reply")
             return
-        self.speech_worker = SpeechOutputWorker(self.last_response_text)
-        self.speech_worker.failed.connect(self.connection_label.setText)
-        self.speech_worker.finished_speaking.connect(
-            lambda: self.speak_button.setText("🔊  Read last reply")
-        )
-        self.speak_button.setText("■  Stop speaking")
-        self.speech_worker.start()
+        self._speak_text(self.last_response_text)
 
     def _check_status(self) -> None:
         if self.worker and self.worker.isRunning():
