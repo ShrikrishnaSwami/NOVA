@@ -168,3 +168,18 @@ def plan_computer_intent(message: str) -> dict[str, object] | None:
                 "description": f"list the contents of {path}"}
 
     return None
+
+
+def plan_os_query(message: str) -> dict[str, str] | None:
+    """Map plain-language, read-only questions to a small OS-awareness endpoint."""
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", message.casefold())
+    normalized = " ".join(normalized.split())
+    if re.search(r"\b(what|which).{0,30}\b(apps|programs).{0,20}\b(running|open)\b|\b(running|open)\s+(apps|programs|processes)\b", normalized):
+        return {"endpoint": "/computer/processes?limit=100", "kind": "processes"}
+    if re.search(r"\b(open|visible|active)\s+windows\b|\bwhat\s+windows\s+(are\s+)?open\b", normalized):
+        return {"endpoint": "/computer/windows?limit=100", "kind": "windows"}
+    if re.search(r"\b(what|which).{0,30}\b(window|app).{0,20}\b(active|foreground|focused)\b|\bwhat\s+am\s+i\s+looking\s+at\b|\bwhat\s+is\s+on\s+my\s+screen\b", normalized):
+        return {"endpoint": "/computer/windows?limit=20", "kind": "windows"}
+    if re.search(r"\b(system info|system information|computer specs|pc specs|about this computer|system overview)\b", normalized):
+        return {"endpoint": "/computer/system", "kind": "system"}
+    return None
