@@ -14,7 +14,9 @@ The project is in active early development. The current release includes a local
 - Echo setup mode that works without model credentials.
 - OpenAI-compatible adapter for local model servers and compatible hosted APIs.
 - Optional PySide6 desktop client with animated NOVA visual, chat, and backend/model status.
-- Conversation history held in the desktop session (persistent memory is a later milestone).
+- SQLite-backed persistent conversations and user-controlled long-term memories.
+- Local feature-hash vector similarity retrieval; no cloud embeddings or GPU required.
+- Memory review, approval, editing, and deletion API.
 
 ## Requirements
 
@@ -84,6 +86,28 @@ You can also use the backend without the desktop client:
 - Health: http://127.0.0.1:8000/health
 - API docs: http://127.0.0.1:8000/docs
 - AI status: http://127.0.0.1:8000/system/ai
+
+## Persistent memory
+
+NOVA stores its conversation history and long-term memories in a local SQLite database. By default the database is created at `~/.nova/nova_memory.sqlite3`; override it with `NOVA_MEMORY_DB_PATH` in your private `.env` file.
+
+Memory retrieval uses deterministic local feature-hash vectors and cosine similarity. It does not send memory text to an embedding API and does not require a separate vector database. This is intentionally lightweight; a dedicated local embedding model can replace the encoder later.
+
+Memory policy:
+- Explicit `remember that ...` requests are saved.
+- Safe preferences, interests, and project facts may be saved automatically.
+- High-impact suggestions are marked pending until approved.
+- Credential and personal-identifier patterns are not saved.
+- Memories can be listed, approved, edited, and deleted through the API.
+
+Useful endpoints:
+- `GET /memory` — list memories.
+- `GET /memory?status=pending` — review suggestions.
+- `POST /memory/{id}/approve` — approve a suggestion.
+- `PATCH /memory/{id}` — edit a memory.
+- `DELETE /memory/{id}` — delete a memory.
+- `GET /conversations` and `GET /conversations/{id}` — browse saved conversations.
+- `DELETE /conversations/{id}` — delete a conversation and its messages.
 
 ## Tests
 
