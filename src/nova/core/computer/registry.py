@@ -16,6 +16,7 @@ _ALLOWED_APPS = {
     "calculator": "calc.exe",
     "paint": "mspaint.exe",
     "file explorer": "explorer.exe",
+    "windows settings": "ms-settings:",
 }
 _TEXT_SUFFIXES = {".txt", ".md", ".py", ".json", ".csv", ".log", ".yaml", ".yml", ".toml", ".ini"}
 _MAX_READ_BYTES = 64 * 1024
@@ -120,7 +121,11 @@ class ComputerToolRegistry:
                 executable = _ALLOWED_APPS.get(app)
                 if not executable:
                     raise ComputerToolError("That application is not on NOVA's allowlist.")
-                subprocess.Popen([executable], shell=False, close_fds=True)
+                if executable == "ms-settings:":
+                    # Fixed Windows Settings URI; no user-controlled command or shell.
+                    subprocess.Popen(["explorer.exe", executable], shell=False, close_fds=True)
+                else:
+                    subprocess.Popen([executable], shell=False, close_fds=True)
                 result = {"message": f"Opened {app}."}
             elif action == "list_directory":
                 folder = self._resolve_allowed_path(str(parameters.get("path", "")))
