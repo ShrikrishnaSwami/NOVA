@@ -33,7 +33,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $iscc = Join-Path $env:ProgramFiles(x86) "Inno Setup 6/ISCC.exe"
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup compiler was not found." }
           & $iscc "installer/NOVA.iss"
       - name: Upload installer artifact
