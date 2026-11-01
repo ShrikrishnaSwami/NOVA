@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 
 import httpx
 from PySide6.QtWidgets import (
@@ -40,6 +41,9 @@ class ComputerControlsDialog(QDialog):
             ("Search contents", self.search_contents),
             ("Open path", self.open_path),
             ("Read text file", self.read_file),
+            ("System overview", self.show_system),
+            ("Running processes", self.show_processes),
+            ("Open windows", self.show_windows),
             ("Audit log", self.show_audit),
         ):
             button = QPushButton(label)
@@ -182,6 +186,41 @@ class ComputerControlsDialog(QDialog):
                 QMessageBox.warning(self, "Invalid path", "The path could not be validated.")
                 return
             self.execute("read_text_file", {"path": path.strip()}, f"read the text content of {path.strip()}")
+
+    def show_system(self) -> None:
+        try:
+            data = self.request("GET", "/computer/system")
+            self.output.clear()
+            for key, value in data.items():
+                rendered = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                self.output.addItem(f"{key}: {rendered}")
+            self.status.setText("Read-only snapshot of the current Windows session.")
+        except Exception as exc:
+            QMessageBox.warning(self, "System overview unavailable", str(exc))
+
+    def show_processes(self) -> None:
+        try:
+            processes = self.request("GET", "/computer/processes?limit=200").get("processes", [])
+            self.output.clear()
+            for process in processes:
+                memory_mb = process.get("memory_bytes", 0) / (1024 * 1024)
+                self.output.addItem(f"{process['name']}  ·  PID {process['pid']}  ·  {process['status']}  ·  {memory_mb:.1f} MB")
+            self.status.setText(f"{len(processes)} visible process records. No command lines or environment variables are collected.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Process inventory unavailable", str(exc))
+
+    def show_windows(self) -> None:
+        try:
+            data = self.request("GET", "/computer/windows?limit=200")
+            self.output.clear()
+            foreground = data.get("foreground")
+            if foreground:
+                self.output.addItem(f"FOREGROUND  ·  {foreground.get('title', '')}  ·  PID {foreground.get('pid')}")
+            for window in data.get("windows", []):
+                self.output.addItem(f"{window.get('title', '')}  ·  PID {window.get('pid')}")
+            self.status.setText(f"{len(data.get('windows', []))} visible top-level windows.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Window inventory unavailable", str(exc))
 
     def show_audit(self) -> None:
         try:
