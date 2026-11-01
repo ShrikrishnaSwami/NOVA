@@ -14,7 +14,7 @@ def test_window_controls_are_windows_only(monkeypatch) -> None:
 def test_window_control_rejects_unknown_action_before_os_access(monkeypatch) -> None:
     monkeypatch.setattr(window_control.os, "name", "nt")
     with pytest.raises(window_control.WindowControlError, match="Supported actions"):
-        window_control.control_window(123, "close")
+        window_control.control_window(123, "shutdown")
 
 
 
