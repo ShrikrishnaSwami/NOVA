@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,12 @@ class Settings(BaseSettings):
     ai_base_url: str = "http://127.0.0.1:1234/v1"
     ai_api_key: str = ""
     ai_timeout_seconds: float = 60.0
+
+    # Generation defaults tuned for responsive local chat. All are configurable.
+    ai_max_tokens: int = Field(default=512, ge=64, le=8192)
+    ai_context_messages: int = Field(default=8, ge=0, le=20)
+    ai_top_p: float = Field(default=0.8, gt=0.0, le=1.0)
+    ai_qwen_no_think: bool = True
 
     # SQLite database; the path is expanded and created automatically.
     memory_db_path: str = "~/.nova/nova_memory.sqlite3"
