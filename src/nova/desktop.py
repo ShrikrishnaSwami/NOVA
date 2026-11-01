@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 from nova.config import get_settings
-from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, plan_window_intent, requested_application_name
+from nova.core.computer.intents import application_candidates, plan_computer_intent, plan_os_query, plan_system_intent, plan_window_intent, requested_application_name
 from nova.desktop_computer import ComputerControlsDialog
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
@@ -547,6 +547,28 @@ class NovaWindow(QMainWindow):
             self._add_message("NOVA", reply)
             self.history.append({"role": "assistant", "content": reply})
             self.connection_label.setText("Read-only Windows information retrieved.")
+            return
+
+        # Route narrow system-control and Windows Search requests through approval.
+        system_plan = plan_system_intent(message)
+        if system_plan:
+            self.input.clear()
+            self._add_message("YOU", message)
+            self.history.append({"role": "user", "content": message})
+            dialog = ComputerControlsDialog(self)
+            result = dialog.execute_system_action(
+                str(system_plan["endpoint"]),
+                dict(system_plan["payload"]),
+                str(system_plan["description"]),
+            )
+            dialog.close()
+            reply = (
+                result.get("message", "Windows action completed.")
+                if result else "I didn't change Windows. The action was cancelled or blocked."
+            )
+            self._add_message("NOVA", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.connection_label.setText(reply)
             return
 
         # Resolve conversational window commands against live visible-window metadata.
