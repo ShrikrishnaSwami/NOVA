@@ -120,7 +120,7 @@ Useful endpoints:
 
 Open **Computer controls** in the desktop sidebar. NOVA currently supports:
 
-- Open Notepad, Calculator, Paint, or File Explorer from a fixed application allowlist.
+- Discover launchable `.lnk` applications from both the current-user and all-users Windows Start Menus, plus Windows Settings.
 - List folders, search file/folder names, and read selected text files inside explicitly approved roots.
 - Ask for a separate confirmation before every operation.
 - Keep a local audit record of action type, safe parameters, outcome, and timestamp. File contents are never written to the audit log.
