@@ -14,6 +14,8 @@ NOVA uses a local FastAPI process bound to `127.0.0.1` by default. The optional 
 - The backend retrieves relevant approved memories and adds them as bounded context to chat requests.
 - The desktop remains a thin client; memory management is exposed through typed API endpoints.
 - The backend URL can be overridden with `NOVA_API_URL`.
+- Optional voice input runs Vosk in a worker thread and reads audio only after the user clicks Talk; optional speech output uses local Windows SAPI voices through pyttsx3.
+- Voice dependencies are isolated in the `voice` extra, and the Vosk model is downloaded separately and configured with `NOVA_VOSK_MODEL_PATH`.
 
 ## AI provider layer
 
@@ -65,7 +67,7 @@ The SQLite memory service sits beside the provider adapter and is independent of
 5. SQLite conversation history and local vector memory with approval, editing, and deletion controls.
 6. Permission manager, tool registry, and audit log.
 7. Streaming text conversation.
-8. Voice pipeline and small, allowlisted Windows tools.
+8. Voice pipeline foundation: local push-to-talk transcription and local speech output. Next: permission manager, tool registry, audit log, and small allowlisted Windows tools.
 
 
 ## Streaming and request performance
