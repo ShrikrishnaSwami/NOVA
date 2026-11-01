@@ -1023,7 +1023,7 @@ class NovaWindow(QMainWindow):
             for index, call in enumerate(calls, 1)
         )
         reason = str(proposal.get("reason", "")).strip()
-        prompt = "NOVA proposes the following registered tool actions:\n\\n" + descriptions
+        prompt = "NOVA proposes the following registered tool actions:\n\n" + descriptions
         if reason:
             prompt += "\n\nReason: " + reason
         prompt += "\n\nThese actions will only run if you approve."
@@ -1153,6 +1153,9 @@ class NovaWindow(QMainWindow):
             return
 
         model_path = get_vosk_model_path()
+        if not Path(model_path).is_dir():
+            self.connection_label.setText("The local Vosk model folder is missing. Reinstall NOVA or set NOVA_VOSK_MODEL_PATH.")
+            return
         if not model_path:
             QMessageBox.information(
                 self,
