@@ -69,7 +69,7 @@ NOVA now includes a laptop-only distributed runtime foundation that the installe
 - GET /cluster/status reports the host-to-broker connection, and POST /cluster/diagnostics/publish sends a harmless test event.
 - The cluster is enabled by default. NOVA can launch Docker Desktop if installed; if Docker is unavailable or its first-run setup is incomplete, NOVA continues in standalone mode.
 
-This is the first infrastructure milestone, not yet a migration of chat, memory, scheduling, or Windows automation into separate services. SQLite remains the source of truth for existing conversations and memories. The Windows Host Agent boundary and service-by-service extraction are subsequent milestones.
+This is the first infrastructure milestone, not yet a migration of chat, memory, scheduling, or Windows automation into separate services. SQLite remains the source of truth for existing conversations and memories; the API initializes it automatically, so no separate database command is needed. The Windows Host Agent boundary and service-by-service extraction are subsequent milestones.
 
 ### Start the local cluster for development
 
