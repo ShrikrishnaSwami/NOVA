@@ -115,3 +115,13 @@ If NATS is unavailable at startup, NOVA retries in the background and continues 
 This is a distributed application running on one physical machine, not machine-level high availability. A laptop shutdown, disk failure, Docker engine failure, or Windows failure affects every local node. Containers provide process and dependency isolation, not a second physical fault domain.
 
 Do not bind NATS to a LAN interface or expose the NOVA API publicly. Remote access requires a separate authentication, authorization, encryption, and threat-model review.
+## Replicate the observer locally
+
+For a small worker-pool experiment, run two observer containers against the same durable pull consumer:
+
+```powershell
+docker compose up -d --scale event-worker=2
+docker compose ps
+```
+
+Both replicas share the durable JetStream consumer, so each stored event is assigned to one observer rather than being broadcast to every replica. This is a safe read-only demonstration of competing workers; it does not yet distribute computer-control or scheduled-task execution.
