@@ -79,7 +79,7 @@ async def run() -> None:
                     await message.ack()
                 except Exception:
                     logger.exception("Could not process event on %s", message.subject)
-                    await message.nak()
+                    await message.term()
     finally:
         await connection.drain()
         logger.info("Event observer stopped.")
