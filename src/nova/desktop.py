@@ -21,6 +21,7 @@ from nova.core.computer.intents import application_candidates, plan_computer_int
 from nova.desktop_computer import ComputerControlsDialog
 from nova.desktop_command_centre import NovaCommandCentre
 from nova.core.voice import WakeWordSession
+from nova.distributed.supervisor import ClusterSupervisor
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, QAbstractNativeEventFilter, QLockFile
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient, QAction
 from PySide6.QtWidgets import (
@@ -328,6 +329,7 @@ class NovaWindow(QMainWindow):
         self._tray_available = False
         self._hotkey_registered = False
         self._backend_process = None
+        self._cluster_supervisor = ClusterSupervisor(enabled=_SETTINGS.distributed_enabled)
         self.history: list[dict[str, str]] = []
         self.conversation_id = str(uuid4())
         self.worker: ApiWorker | None = None
@@ -347,6 +349,7 @@ class NovaWindow(QMainWindow):
         self._stream_flush_timer.timeout.connect(self._flush_stream_tokens)
         self._build_ui()
         self._setup_windows_shell()
+        self._cluster_supervisor.start_background()
         self._ensure_backend_process()
         QTimer.singleShot(1500, self._check_status)
         QTimer.singleShot(2600, self._restore_last_conversation)
@@ -1500,6 +1503,7 @@ class NovaWindow(QMainWindow):
     def _quit_nova(self) -> None:
         self._quit_requested = True
         self._stop_owned_backend()
+        self._cluster_supervisor.stop_background()
         if self._hotkey_registered:
             try:
                 import ctypes
@@ -1519,6 +1523,7 @@ class NovaWindow(QMainWindow):
                 self.wake_thread.stop()
             self._stop_speech_output()
             self._stop_owned_backend()
+            self._cluster_supervisor.stop_background()
             if self._hotkey_registered:
                 try:
                     import ctypes
