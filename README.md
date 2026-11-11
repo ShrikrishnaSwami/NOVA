@@ -219,7 +219,9 @@ The local backend defaults to `http://127.0.0.1:8000`:
 - `GET /memory`, `GET /memory/stats`, `GET /memory/search` — memory.
 - `GET /conversations`, `GET /conversations/search` — conversation history.
 - `GET /tasks` and `GET /tasks/capabilities` — scheduler.
-- `GET /runtime/state` and `GET /runtime/tools` — runtime telemetry and registered tools.\n- `GET /cluster/status` — optional local distributed-runtime status.\n- `POST /cluster/diagnostics/publish` — publish a harmless diagnostic event when messaging is enabled.
+- `GET /runtime/state` and `GET /runtime/tools` — runtime telemetry and registered tools.
+- `GET /cluster/status` — optional local distributed-runtime status.
+- `POST /cluster/diagnostics/publish` — publish a harmless diagnostic event when messaging is enabled.
 - `GET /computer/automation/capabilities` — supported automation action contracts.
 
 The installed application starts and manages the backend itself. You do not need these endpoints for ordinary desktop usage.
