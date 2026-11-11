@@ -62,6 +62,18 @@ class ClusterSupervisor:
         override = os.environ.get("DOCKER_HOST", "").strip().lower()
         if override and not override.startswith("npipe://") and not override.startswith("unix://"):
             raise RuntimeError("NOVA refuses a remote Docker endpoint; the cluster must stay on this laptop.")
+        context = subprocess.run(
+            [docker, "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+            cwd=str(self.context_dir),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            check=False,
+        )
+        endpoint = context.stdout.strip().lower()
+        if context.returncode == 0 and endpoint and not endpoint.startswith(("npipe://", "unix://")):
+            raise RuntimeError("NOVA refuses a non-local Docker context; select the Docker Desktop context on this laptop.")
 
         def check_engine() -> bool:
             result = subprocess.run(
@@ -197,16 +209,16 @@ class ClusterSupervisor:
             command = self._compose_command() + ["down"]
             log_dir = user_data_dir() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
-            log_handle = (log_dir / "cluster.log").open("a", encoding="utf-8")
-            subprocess.Popen(
-                command,
-                cwd=str(self.context_dir),
-                stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                close_fds=True,
-            )
+            with (log_dir / "cluster.log").open("a", encoding="utf-8") as log_handle:
+                subprocess.Popen(
+                    command,
+                    cwd=str(self.context_dir),
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    close_fds=True,
+                )
             self._owned = False
             self._set_state("stopping")
         except Exception as exc:
