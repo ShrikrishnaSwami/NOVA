@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     port: int = 8000
     log_level: str = "INFO"
 
-    distributed_enabled: bool = False
+    distributed_enabled: bool = True
     nats_url: str = "nats://127.0.0.1:4222"
     node_id: str = "nova-windows-host"
 
