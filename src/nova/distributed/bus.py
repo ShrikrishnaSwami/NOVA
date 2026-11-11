@@ -72,7 +72,10 @@ class NatsEventBus:
         """Drain the connection cleanly during API shutdown."""
         if self._connection is not None:
             try:
-                await self._connection.drain()
+                if self._connection.is_connected:
+                    await self._connection.drain()
+                else:
+                    await self._connection.close()
             finally:
                 self._connection = None
                 self._jetstream = None
