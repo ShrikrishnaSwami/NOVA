@@ -1,0 +1,49 @@
+name: nova-local-cluster
+
+services:
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-m", "8222", "--name", "nova-local-broker"]
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - nova_nats_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8222/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    command:
+      - "-js"
+      - "-m"
+      - "8222"
+      - "--name"
+      - "nova-local-broker"
+      - "-sd"
+      - "/data"
+
+  event-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      NOVA_NATS_URL: nats://nats:4222
+      NOVA_NODE_ID: nova-event-observer-1
+      NOVA_LOG_LEVEL: INFO
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  nova_nats_data:
