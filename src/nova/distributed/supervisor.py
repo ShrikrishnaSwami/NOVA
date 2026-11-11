@@ -77,7 +77,7 @@ class ClusterSupervisor:
 
         def check_engine() -> bool:
             result = subprocess.run(
-                [docker, "info", "--format", "{{.ServerVersion}}"],
+                [docker, "info", "--format", "{{.OSType}}"],
                 cwd=str(self.context_dir),
                 capture_output=True,
                 text=True,
@@ -86,7 +86,9 @@ class ClusterSupervisor:
                 check=False,
             )
             if result.returncode == 0:
-                self._write_log([docker, "info"], result.stdout, result.stderr)
+                if result.stdout.strip().lower() != "linux":
+                    raise RuntimeError("NOVA's local containers require Docker Desktop's Linux container engine.")
+                self._write_log([docker, "info", "--format", "{{.OSType}}"], result.stdout, result.stderr)
                 return True
             return False
 
