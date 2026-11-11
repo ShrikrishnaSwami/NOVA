@@ -164,17 +164,17 @@ The GitHub Actions workflows run automated tests and package the Windows applica
 
 ## Local distributed runtime (experimental)
 
-The repository now contains an optional single-laptop distributed foundation. Docker Compose starts a NATS JetStream broker and a separate event-observer container. The Windows-hosted FastAPI process can connect to the broker when NOVA_DISTRIBUTED_ENABLED is enabled.
+The repository now contains a single-laptop distributed foundation. The installed desktop uses a background ClusterSupervisor to start a NATS JetStream broker and a separate event-observer container through Docker Compose. The supervisor can launch the standard Docker Desktop installation when the engine is stopped. Set NOVA_DISTRIBUTED_ENABLED=false to disable this behavior.
 
 - Compose broker ports bind to loopback only; the worker is reachable only over the private Compose network.
 - JetStream persists versioned events in the nova_nats_data volume with a seven-day retention window.
 - The host publishes service lifecycle events; the cluster diagnostics endpoint can publish a harmless test event.
 - The observer uses a durable pull consumer and acknowledges events after logging metadata. It performs no computer actions.
-- If messaging is disabled or unavailable, NOVA continues in standalone mode.
+- If Docker or messaging is disabled or unavailable, NOVA continues in standalone mode; the API retries its broker connection in the background.
 - Existing chat, memory, scheduler, and Windows integrations remain in the current host process. SQLite remains the source of truth.
 
 See DISTRIBUTED_RUNTIME.md for topology, event schema, configuration, and verification steps.
 
 This is not machine-level high availability: all nodes still share one laptop, operating system, Docker engine, and storage device. NATS and the NOVA API must remain loopback-only until a separate security review adds authentication and authorization.
 
-The next architecture milestone is an app-managed cluster supervisor that can start and stop Compose services from the installed desktop. Only after that lifecycle is reliable should chat, memory, and scheduler responsibilities be extracted into independent services.
+The next architecture milestone is event publication for chat, memory, scheduler, and approved automation boundaries, followed by typed durable job queues and independently replicated workers.
