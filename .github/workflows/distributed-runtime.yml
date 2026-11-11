@@ -1,0 +1,54 @@
+name: Local distributed runtime
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build and start local services
+        run: docker compose up -d --build
+      - name: Install NOVA host dependencies
+        run: python -m pip install --upgrade pip && python -m pip install .
+      - name: Publish a host event and verify container observer
+        shell: bash
+        run: |
+          EVENT_ID=$(python - <<'PY'
+          import asyncio
+          from nova.distributed import NatsEventBus
+
+          async def main():
+              bus = NatsEventBus('nats://127.0.0.1:4222', 'github-actions-host')
+              await bus.connect()
+              event = await bus.publish('nova.events.diagnostic', {'message': 'CI integration test'})
+              print(event['event_id'])
+              await bus.close()
+
+          asyncio.run(main())
+          PY
+          )
+          for attempt in $(seq 1 20); do
+            if docker compose logs event-worker 2>&1 | grep -Fq "$EVENT_ID"; then
+              echo "Event $EVENT_ID was observed by the containerized worker."
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose logs event-worker
+          echo "The event worker did not observe event $EVENT_ID."
+          exit 1
+      - name: Stop local services
+        if: always()
+        run: docker compose down -v
