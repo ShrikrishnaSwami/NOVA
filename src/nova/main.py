@@ -1,5 +1,6 @@
 """Application entry point for NOVA's local API and background services."""
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 from fastapi import FastAPI
 from nova.api.chat import router as chat_router
@@ -27,22 +28,33 @@ async def lifespan(app: FastAPI):
     get_provider()
     MemoryStore(settings.memory_db_path).initialize()
     event_bus = None
+    event_bus_task = None
     if settings.distributed_enabled:
         event_bus = NatsEventBus(settings.nats_url, settings.node_id)
-        try:
-            await event_bus.connect()
-            await event_bus.publish("nova.events.service.started", {"application": settings.app_name})
-        except Exception as exc:
-            logger.warning(
-                "Local distributed messaging is unavailable; NOVA will continue in standalone mode: %s",
-                exc,
-            )
-            try:
-                await event_bus.close()
-            except Exception:
-                logger.debug("Could not close partially initialized NATS connection.", exc_info=True)
-            event_bus = None
-    app.state.event_bus = event_bus
+        app.state.event_bus = event_bus
+
+        async def connect_event_bus() -> None:
+            while True:
+                try:
+                    await event_bus.connect()
+                    await event_bus.publish(
+                        "nova.events.service.started",
+                        {"application": settings.app_name},
+                    )
+                    logger.info("NOVA connected to its local distributed event bus.")
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.info("Waiting for local NATS broker: %s", exc)
+                    try:
+                        await event_bus.close()
+                    except Exception:
+                        logger.debug("Could not close partially initialized NATS connection.", exc_info=True)
+                    await asyncio.sleep(5)
+        event_bus_task = asyncio.create_task(connect_event_bus())
+    else:
+        app.state.event_bus = None
     def notify_task(event: dict):
         if notifications_enabled():
             task = event.get("task", {})
@@ -69,12 +81,19 @@ async def lifespan(app: FastAPI):
     finally:
         await monitor.stop()
         scheduler.stop()
+        if event_bus_task is not None:
+            event_bus_task.cancel()
+            try:
+                await event_bus_task
+            except asyncio.CancelledError:
+                pass
         if event_bus is not None:
             try:
-                await event_bus.publish(
-                    "nova.events.service.stopping",
-                    {"application": settings.app_name},
-                )
+                if event_bus.connected:
+                    await event_bus.publish(
+                        "nova.events.service.stopping",
+                        {"application": settings.app_name},
+                    )
             finally:
                 await event_bus.close()
         await close_provider()
