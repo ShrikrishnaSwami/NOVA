@@ -76,6 +76,8 @@ class NatsEventBus:
                     await self._connection.drain()
                 else:
                     await self._connection.close()
+            except Exception:
+                logger.debug("NATS connection did not close cleanly.", exc_info=True)
             finally:
                 self._connection = None
                 self._jetstream = None
