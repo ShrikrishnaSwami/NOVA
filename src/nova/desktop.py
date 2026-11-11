@@ -333,6 +333,7 @@ class NovaWindow(QMainWindow):
         self.history: list[dict[str, str]] = []
         self.conversation_id = str(uuid4())
         self.worker: ApiWorker | None = None
+        self.cluster_worker: ApiWorker | None = None
         self._last_response_status: str | None = None
         self._stream_buffer = ""
         self.last_response_text = ""
@@ -352,11 +353,15 @@ class NovaWindow(QMainWindow):
         self._cluster_supervisor.start_background()
         self._ensure_backend_process()
         QTimer.singleShot(1500, self._check_status)
+        QTimer.singleShot(3500, self._check_cluster_status)
         QTimer.singleShot(2600, self._restore_last_conversation)
 
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._check_status)
         self.status_timer.start(15000)
+        self.cluster_timer = QTimer(self)
+        self.cluster_timer.timeout.connect(self._check_cluster_status)
+        self.cluster_timer.start(15000)
         if wake_word_enabled():
             QTimer.singleShot(2500, self._start_wake_word)
 
@@ -424,6 +429,10 @@ class NovaWindow(QMainWindow):
         self.backend_label = QLabel("●  BACKEND CHECKING")
         self.backend_label.setObjectName("statusPill")
         side.addWidget(self.backend_label)
+        self.cluster_label = QLabel("●  LOCAL CLUSTER STARTING")
+        self.cluster_label.setObjectName("statusPill")
+        self.cluster_label.setToolTip("NOVA's local Docker services are starting in the background.")
+        side.addWidget(self.cluster_label)
         footer = QLabel("LOCAL-FIRST  •  OPEN SOURCE")
         footer.setObjectName("footer")
         side.addWidget(footer)
@@ -1324,6 +1333,31 @@ class NovaWindow(QMainWindow):
         self.worker.completed.connect(self._status_completed)
         self.worker.failed.connect(self._status_failed)
         self.worker.start()
+
+    def _check_cluster_status(self) -> None:
+        if self.cluster_worker and self.cluster_worker.isRunning():
+            return
+        self.cluster_worker = ApiWorker("/cluster/status")
+        self.cluster_worker.completed.connect(self._cluster_status_completed)
+        self.cluster_worker.failed.connect(self._cluster_status_failed)
+        self.cluster_worker.start()
+
+    def _cluster_status_completed(self, data: dict) -> None:
+        if data.get("connected"):
+            self.cluster_label.setText("●  DISTRIBUTED CLUSTER ONLINE")
+            self.cluster_label.setToolTip("NATS JetStream is connected. Local event services are running.")
+        elif not data.get("enabled", False):
+            self.cluster_label.setText("●  STANDALONE MODE")
+            self.cluster_label.setToolTip("The local distributed cluster is disabled in NOVA settings.")
+        else:
+            state = self._cluster_supervisor.state
+            self.cluster_label.setText("●  LOCAL CLUSTER " + state.upper())
+            self.cluster_label.setToolTip(self._cluster_supervisor.error or "NOVA is waiting for its local event broker.")
+
+    def _cluster_status_failed(self, message: str) -> None:
+        state = self._cluster_supervisor.state
+        self.cluster_label.setText("●  LOCAL CLUSTER " + state.upper())
+        self.cluster_label.setToolTip(self._cluster_supervisor.error or message)
 
     def _status_completed(self, data: dict) -> None:
         provider = str(data.get("provider", "unknown"))
