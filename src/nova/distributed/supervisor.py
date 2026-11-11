@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from nova.config import user_data_dir
@@ -46,10 +48,61 @@ class ClusterSupervisor:
             self._state = state
             self._error = error
 
-    def _compose_command(self) -> list[str]:
+    def _docker_executable(self) -> str:
         docker = shutil.which("docker")
-        if not docker:
-            raise RuntimeError("Docker Desktop is not installed or docker.exe is not on PATH.")
+        if docker:
+            return docker
+        program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        candidate = program_files / "Docker" / "Docker" / "resources" / "bin" / "docker.exe"
+        if candidate.is_file():
+            return str(candidate)
+        raise RuntimeError("Docker Desktop is not installed. Install Docker Desktop to enable NOVA's local cluster.")
+
+    def _ensure_local_engine(self, docker: str) -> None:
+        override = os.environ.get("DOCKER_HOST", "").strip().lower()
+        if override and not override.startswith("npipe://") and not override.startswith("unix://"):
+            raise RuntimeError("NOVA refuses a remote Docker endpoint; the cluster must stay on this laptop.")
+
+        def check_engine() -> bool:
+            result = subprocess.run(
+                [docker, "info", "--format", "{{.ServerVersion}}"],
+                cwd=str(self.context_dir),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                check=False,
+            )
+            if result.returncode == 0:
+                self._write_log([docker, "info"], result.stdout, result.stderr)
+                return True
+            return False
+
+        if check_engine():
+            return
+
+        if os.name == "nt":
+            program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+            desktop_app = program_files / "Docker" / "Docker" / "Docker Desktop.exe"
+            if desktop_app.is_file():
+                subprocess.Popen(
+                    [str(desktop_app)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                deadline = time.monotonic() + 180
+                while time.monotonic() < deadline and not self._stop_requested.is_set():
+                    time.sleep(3)
+                    if check_engine():
+                        return
+                raise RuntimeError("Docker Desktop did not become ready. Finish its first-run setup and try again.")
+
+        raise RuntimeError("Docker Desktop is installed but its engine is not running.")
+
+    def _compose_command(self) -> list[str]:
+        docker = self._docker_executable()
         if not self.compose_file.is_file():
             raise RuntimeError(f"NOVA's local Compose file was not found: {self.compose_file}")
         return [
@@ -107,9 +160,7 @@ class ClusterSupervisor:
     def _start_cluster(self) -> None:
         try:
             command = self._compose_command()
-            docker_check = self._run([command[0], "info", "--format", "{{.ServerVersion}}"], 12)
-            if docker_check.returncode != 0:
-                raise RuntimeError("Docker Desktop is installed but its engine is not running. Start Docker Desktop and try again.")
+            self._ensure_local_engine(command[0])
 
             base = command + ["ps", "--services", "--filter", "status=running"]
             existing = self._run(base, 20)
