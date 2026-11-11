@@ -58,6 +58,46 @@ The project is under active development. The current source milestone is **0.1.7
 - Tasks can be listed, paused, cancelled, and inspected through execution history.
 - Optional native Windows notifications can report NOVA replies, task outcomes, and system alerts.
 
+## Local distributed runtime (experimental foundation)
+
+NOVA now includes an optional, laptop-only distributed runtime foundation:
+
+- Docker Compose runs a local NATS JetStream broker and a separate event-observer worker.
+- Broker ports bind to 127.0.0.1 only; the worker communicates over a private Compose network.
+- JetStream persists versioned events in a Docker volume for up to seven days.
+- The Windows-hosted NOVA API can optionally publish lifecycle events to the broker.
+- GET /cluster/status reports the host-to-broker connection, and POST /cluster/diagnostics/publish sends a harmless test event.
+- Messaging is opt-in. If the broker is unavailable, NOVA continues in standalone mode.
+
+This is the first infrastructure milestone, not yet a migration of chat, memory, scheduling, or Windows automation into separate services. SQLite remains the source of truth for existing conversations and memories. The Windows Host Agent boundary and service-by-service extraction are subsequent milestones.
+
+### Start the local cluster for development
+
+Install Docker Desktop, open PowerShell in the repository, then run:
+
+```powershell
+docker compose up -d --build
+```
+
+In the same PowerShell session, enable the host API connection before starting NOVA from source:
+
+```powershell
+$env:NOVA_DISTRIBUTED_ENABLED = "true"
+$env:NOVA_NATS_URL = "nats://127.0.0.1:4222"
+nova-service
+```
+
+Check http://127.0.0.1:8000/cluster/status, then publish a test event:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/cluster/diagnostics/publish -ContentType "application/json" -Body '{"message":"NOVA local event pipeline test"}'
+docker compose logs -f event-worker
+```
+
+Stop the containers with `docker compose down`. Persistent broker data remains in the `nova_nats_data` volume; use `docker compose down -v` only if you intentionally want to erase it.
+
+The containerized worker is currently an observer/diagnostic consumer. It does not execute computer-control actions. Production job queues, replicated task workers, and automatic container startup from the installed desktop will be added only after this foundation is validated.
+
 ## What NOVA does not do
 
 NOVA is not an unrestricted autonomous computer operator. It does not expose arbitrary shell commands, generated scripts, unrestricted Python execution, or arbitrary process termination. Model output is untrusted input. Registered actions are validated and permission-gated; physical actions require user confirmation.
@@ -179,7 +219,7 @@ The local backend defaults to `http://127.0.0.1:8000`:
 - `GET /memory`, `GET /memory/stats`, `GET /memory/search` — memory.
 - `GET /conversations`, `GET /conversations/search` — conversation history.
 - `GET /tasks` and `GET /tasks/capabilities` — scheduler.
-- `GET /runtime/state` and `GET /runtime/tools` — runtime telemetry and registered tools.
+- `GET /runtime/state` and `GET /runtime/tools` — runtime telemetry and registered tools.\n- `GET /cluster/status` — optional local distributed-runtime status.\n- `POST /cluster/diagnostics/publish` — publish a harmless diagnostic event when messaging is enabled.
 - `GET /computer/automation/capabilities` — supported automation action contracts.
 
 The installed application starts and manages the backend itself. You do not need these endpoints for ordinary desktop usage.
@@ -215,7 +255,7 @@ The installed desktop application does not require this manual development workf
 
 ## Documentation
 
-- [Architecture and implementation boundaries](docs/ARCHITECTURE.md)
+- [Architecture and implementation boundaries](docs/ARCHITECTURE.md)\n- [Local distributed runtime](docs/DISTRIBUTED_RUNTIME.md)
 - [Windows installer and lifecycle](docs/WINDOWS_INSTALLER.md)
 - [Local voice setup](docs/VOICE_SETUP.md)
 - [Memory, tools, and voice internals](docs/MODEL_TOOLS_AND_VOICE.md)
