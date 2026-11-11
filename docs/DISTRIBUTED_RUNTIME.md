@@ -6,7 +6,7 @@
 
 NOVA's distributed-systems learning and runtime environment is intentionally constrained to one Windows laptop. Docker Compose provides isolated service processes and a private virtual network; no cloud account, remote machine, Kubernetes cluster, or public endpoint is required.
 
-The first increment introduces NATS JetStream and a containerized event observer while retaining the current Windows API, desktop, SQLite memory, scheduler, and native Windows integrations.
+The first increment introduces NATS JetStream and a containerized event observer while retaining the current Windows API, desktop, SQLite memory, scheduler, and native Windows integrations. The installed desktop starts the Compose services in a background supervisor, launches Docker Desktop when its standard Windows installation is detected, and stops only the Compose project it started when NOVA is quit.
 
 ## Current topology
 
@@ -45,6 +45,12 @@ Every event uses a versioned JSON envelope:
 The first host events are nova.events.service.started and nova.events.service.stopping. The diagnostics endpoint emits nova.events.diagnostic. JetStream stores events for up to seven days in the named Docker volume. The observer uses a durable pull consumer and acknowledges messages after logging their metadata.
 
 The observer is intentionally non-executing. It cannot launch applications, read files, invoke tools, or perform Windows automation. Future job workers must use separately defined schemas, typed allowlists, idempotency keys, bounded retries, and the existing NOVA approval model.
+
+## Start and verify (installed desktop)
+
+Requirements: Windows 10/11 and Docker Desktop with the Compose plugin. Install Docker Desktop once and complete its first-run setup. NOVA then starts Docker Desktop and its local Compose services when the desktop launches. The first container build downloads the base image and the small Python messaging dependency, so it requires an internet connection. No cloud account is used.
+
+If Docker Desktop is missing or unavailable, NOVA continues to work in standalone mode and records the cluster startup issue in %APPDATA%\\NOVA\\logs\\cluster.log.
 
 ## Start and verify (developer checkout)
 
@@ -87,11 +93,11 @@ The nova_nats_data volume persists between restarts. To intentionally erase brok
 
 | Variable | Default | Purpose |
 |---|---|---|
-| NOVA_DISTRIBUTED_ENABLED | false | Opt in to host-to-broker messaging |
+| NOVA_DISTRIBUTED_ENABLED | true | Enable automatic local cluster management |
 | NOVA_NATS_URL | nats://127.0.0.1:4222 | Local broker address |
 | NOVA_NODE_ID | nova-windows-host | Host event source identity |
 
-If NATS is unavailable at startup, NOVA logs a warning and continues in standalone mode. Messaging is optional and must not prevent local chat or Windows functionality from starting.
+If NATS is unavailable at startup, NOVA retries in the background and continues in standalone mode until the broker is reachable. Messaging must not prevent local chat or Windows functionality from starting.
 
 ## Next increments
 
