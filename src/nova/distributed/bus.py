@@ -36,7 +36,8 @@ class NatsEventBus:
             servers=[self.url],
             name=self.node_id,
             connect_timeout=2,
-            max_reconnect_attempts=0,
+            reconnect_time_wait=2,
+            max_reconnect_attempts=-1,
         )
         self._jetstream = self._connection.jetstream()
         try:
