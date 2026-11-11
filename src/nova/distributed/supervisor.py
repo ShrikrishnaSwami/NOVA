@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
@@ -108,7 +107,7 @@ class ClusterSupervisor:
     def _start_cluster(self) -> None:
         try:
             command = self._compose_command()
-            docker_check = self._run(command[:2] + ["info", "--format", "{{.ServerVersion}}"], 12)
+            docker_check = self._run([command[0], "info", "--format", "{{.ServerVersion}}"], 12)
             if docker_check.returncode != 0:
                 raise RuntimeError("Docker Desktop is installed but its engine is not running. Start Docker Desktop and try again.")
 
