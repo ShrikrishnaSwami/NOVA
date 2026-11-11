@@ -84,3 +84,17 @@ Wake-word listening is off by default and must be enabled by the user. Microphon
 The shared automation engine exposes a finite registry of typed actions. It validates the entire chain before execution, limits chains to five steps, and stops on cancellation or failure. The desktop shows explicit confirmations. Typed API endpoints independently validate approval flags and operation-specific parameters.
 
 NOVA runs as the signed-in user. It does not install a privileged service, disable Defender/UAC, inject into unrelated processes, or execute model-generated shell commands. User data is kept outside the install directory so updates can preserve it.
+
+
+## Local distributed runtime
+
+The Windows build also bundles a minimal Docker Compose context under the installed application directory. When NOVA starts, its desktop supervisor checks for a local Docker Desktop engine, launches Docker Desktop when the standard installation is present but stopped, and starts the NATS broker plus event worker in the background.
+
+- Docker Desktop with Linux containers and the Compose plugin must be installed once by the user.
+- The first image build needs an internet connection to retrieve the NATS image and Python messaging package.
+- Broker ports bind to 127.0.0.1; the worker remains on the private Compose network.
+- NOVA does not require administrator elevation to run its per-user desktop installer or its normal local service lifecycle.
+- If Docker is missing, its engine is unavailable, or first-run setup is incomplete, NOVA continues in standalone mode and records details in %APPDATA%\\NOVA\\logs\\cluster.log.
+- On Quit NOVA, the supervisor stops the Compose project only when the current desktop session started it. Closing the window to the notification area does not stop the cluster.
+
+The existing SQLite memory database remains in the user's local application-data directory and is initialized by the NOVA API. It is not moved into Docker in this milestone.
