@@ -9,6 +9,7 @@ import os
 import signal
 
 import nats
+from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.api import RetentionPolicy, StorageType, StreamConfig
 
 from nova.distributed.bus import EVENT_SUBJECT, STREAM_NAME
@@ -64,7 +65,7 @@ async def run() -> None:
         while not stopping.is_set():
             try:
                 messages = await subscription.fetch(batch=10, timeout=1)
-            except asyncio.TimeoutError:
+            except NatsTimeoutError:
                 continue
             for message in messages:
                 try:
