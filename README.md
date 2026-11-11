@@ -60,26 +60,28 @@ The project is under active development. The current source milestone is **0.1.7
 
 ## Local distributed runtime (experimental foundation)
 
-NOVA now includes an optional, laptop-only distributed runtime foundation:
+NOVA now includes a laptop-only distributed runtime foundation that the installed desktop manages automatically when Docker Desktop is available:
 
 - Docker Compose runs a local NATS JetStream broker and a separate event-observer worker.
 - Broker ports bind to 127.0.0.1 only; the worker communicates over a private Compose network.
 - JetStream persists versioned events in a Docker volume for up to seven days.
-- The Windows-hosted NOVA API can optionally publish lifecycle events to the broker.
+- The Windows-hosted NOVA API publishes lifecycle events to the broker and retries its connection in the background.
 - GET /cluster/status reports the host-to-broker connection, and POST /cluster/diagnostics/publish sends a harmless test event.
-- Messaging is opt-in. If the broker is unavailable, NOVA continues in standalone mode.
+- The cluster is enabled by default. NOVA can launch Docker Desktop if installed; if Docker is unavailable or its first-run setup is incomplete, NOVA continues in standalone mode.
 
 This is the first infrastructure milestone, not yet a migration of chat, memory, scheduling, or Windows automation into separate services. SQLite remains the source of truth for existing conversations and memories. The Windows Host Agent boundary and service-by-service extraction are subsequent milestones.
 
 ### Start the local cluster for development
 
-Install Docker Desktop, open PowerShell in the repository, then run:
+The installed desktop starts the local Compose cluster automatically and stops the services it started when you quit NOVA. Docker Desktop must be installed; the first Docker image build requires an internet connection. NOVA does not need a cloud account or remote server.
+
+For a source checkout, install Docker Desktop, open PowerShell in the repository, then run:
 
 ```powershell
 docker compose up -d --build
 ```
 
-In the same PowerShell session, enable the host API connection before starting NOVA from source:
+In the same PowerShell session, start the NOVA API with local messaging enabled (this is already the default configuration):
 
 ```powershell
 $env:NOVA_DISTRIBUTED_ENABLED = "true"
@@ -96,7 +98,7 @@ docker compose logs -f event-worker
 
 Stop the containers with `docker compose down`. Persistent broker data remains in the `nova_nats_data` volume; use `docker compose down -v` only if you intentionally want to erase it.
 
-The containerized worker is currently an observer/diagnostic consumer. It does not execute computer-control actions. Production job queues, replicated task workers, and automatic container startup from the installed desktop will be added only after this foundation is validated.
+The containerized worker is currently an observer/diagnostic consumer. It does not execute computer-control actions. Production job queues, replicated task workers, and service extraction will be added in later milestones after this foundation is validated.
 
 ## What NOVA does not do
 
