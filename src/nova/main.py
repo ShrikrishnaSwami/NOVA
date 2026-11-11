@@ -1,7 +1,9 @@
 """Application entry point for NOVA's local API and background services."""
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from nova.api.chat import router as chat_router
+from nova.api.cluster import router as cluster_router
 from nova.api.computer import router as computer_router
 from nova.api.memory import router as memory_router
 from nova.api.tasks import router as tasks_router
@@ -13,6 +15,9 @@ from nova.core.tasks import TaskScheduler, TaskStore
 from nova.core.runtime import SystemStateMonitor
 from nova.core.runtime.tools import SimulationCore, build_default_registry
 from nova.core.computer.shell_integration import notifications_enabled, show_windows_toast
+from nova.distributed import NatsEventBus
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -21,6 +26,23 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     get_provider()
     MemoryStore(settings.memory_db_path).initialize()
+    event_bus = None
+    if settings.distributed_enabled:
+        event_bus = NatsEventBus(settings.nats_url, settings.node_id)
+        try:
+            await event_bus.connect()
+            await event_bus.publish("nova.events.service.started", {"application": settings.app_name})
+        except Exception as exc:
+            logger.warning(
+                "Local distributed messaging is unavailable; NOVA will continue in standalone mode: %s",
+                exc,
+            )
+            try:
+                await event_bus.close()
+            except Exception:
+                logger.debug("Could not close partially initialized NATS connection.", exc_info=True)
+            event_bus = None
+    app.state.event_bus = event_bus
     def notify_task(event: dict):
         if notifications_enabled():
             task = event.get("task", {})
@@ -47,6 +69,14 @@ async def lifespan(app: FastAPI):
     finally:
         await monitor.stop()
         scheduler.stop()
+        if event_bus is not None:
+            try:
+                await event_bus.publish(
+                    "nova.events.service.stopping",
+                    {"application": settings.app_name},
+                )
+            finally:
+                await event_bus.close()
         await close_provider()
 
 
@@ -57,6 +87,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(chat_router)
+app.include_router(cluster_router)
 app.include_router(memory_router)
 app.include_router(computer_router)
 app.include_router(tasks_router)
