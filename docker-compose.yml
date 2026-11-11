@@ -3,7 +3,14 @@ name: nova-local-cluster
 services:
   nats:
     image: nats:2.11-alpine
-    command: ["-js", "-m", "8222", "--name", "nova-local-broker"]
+    command:
+      - "-js"
+      - "-m"
+      - "8222"
+      - "--name"
+      - "nova-local-broker"
+      - "-sd"
+      - "/data"
     ports:
       - "127.0.0.1:4222:4222"
       - "127.0.0.1:8222:8222"
@@ -16,14 +23,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-    command:
-      - "-js"
-      - "-m"
-      - "8222"
-      - "--name"
-      - "nova-local-broker"
-      - "-sd"
-      - "/data"
 
   event-worker:
     build:
