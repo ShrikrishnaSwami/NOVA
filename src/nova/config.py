@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     port: int = 8000
     log_level: str = "INFO"
 
+    distributed_enabled: bool = False
+    nats_url: str = "nats://127.0.0.1:4222"
+    node_id: str = "nova-windows-host"
+
     ai_provider: str = "echo"
     ai_model: str = "local-model"
     ai_base_url: str = "http://127.0.0.1:1234/v1"
