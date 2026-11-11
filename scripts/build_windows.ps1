@@ -15,6 +15,7 @@ $pyinstallerArgs = @(
   "--collect-all", "sounddevice",
   "--collect-all", "pyttsx3",
   "--collect-all", "comtypes",
+  "--collect-all", "nats",
   "--hidden-import", "nova.main",
   "--hidden-import", "nova.service",
   "--hidden-import", "uvicorn.logging",
@@ -28,6 +29,16 @@ python -m PyInstaller @pyinstallerArgs
 if (-not (Test-Path "dist/NOVA/NOVA.exe")) {
   throw "PyInstaller did not produce dist/NOVA/NOVA.exe"
 }
+
+# Bundle the minimal Compose build context so the installed desktop can manage
+# its local NATS broker and event worker without requiring a source checkout.
+$clusterRoot = Join-Path (Resolve-Path "dist/NOVA") "cluster"
+New-Item -ItemType Directory -Force -Path (Join-Path $clusterRoot "docker") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $clusterRoot "src") | Out-Null
+Copy-Item "docker-compose.yml" (Join-Path $clusterRoot "docker-compose.yml") -Force
+Copy-Item "docker/worker.Dockerfile" (Join-Path $clusterRoot "docker/worker.Dockerfile") -Force
+Copy-Item "src/nova" (Join-Path $clusterRoot "src/nova") -Recurse -Force
+
 # Bundle the small, local English Vosk model so voice works after installation
 # without asking the user to download model files or edit source code.
 $modelName = "vosk-model-small-en-us-0.15"
