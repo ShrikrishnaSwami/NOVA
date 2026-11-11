@@ -14,7 +14,7 @@ def test_disabled_supervisor_does_not_start_a_thread() -> None:
 
 def test_supervisor_reports_missing_docker_without_crashing(monkeypatch) -> None:
     supervisor = ClusterSupervisor(enabled=True)
-    monkeypatch.setattr("nova.distributed.supervisor.shutil.which", lambda _name: None)
+    monkeypatch.setattr(supervisor, "_docker_executable", lambda: (_ for _ in ()).throw(RuntimeError("Docker Desktop is not installed.")))
 
     supervisor._start_cluster()
 
